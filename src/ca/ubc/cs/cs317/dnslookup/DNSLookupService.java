@@ -182,7 +182,7 @@ public class DNSLookupService {
   * @return A set of resource records corresponding to the specific query requested.
   */
  private static Set < ResourceRecord > getResults(DNSNode node, int indirectionLevel) {
-  QueryFormat qf = new QueryFormat(lookupString);
+  QueryFormat qf = new QueryFormat(node);
   send_udp_message(qf.queryString);
 
   if (indirectionLevel > MAX_INDIRECTION_LEVEL) {
@@ -219,14 +219,15 @@ public class DNSLookupService {
   return "";
  }
 
- private static byte[] hexStringToByteArray(String s) {
-  int len = s.length();
-  byte[] data = new byte[len / 2];
-  for (int i = 0; i < len; i += 2) {
-   data[i / 2] = (byte)((Character.digit(s.charAt(i), 16) << 4) +
-    Character.digit(s.charAt(i + 1), 16));
+ // https://www.tutorialspoint.com/convert-hex-string-to-byte-array-in-java
+ private static byte[] hexStringToByteArray(String str) {
+  byte[] val = new byte[str.length() / 2];
+  for (int i = 0; i < val.length; i++) {
+   int index = i * 2;
+   int j = Integer.parseInt(str.substring(index, index + 2), 16);
+   val[i] = (byte) j;
   }
-  return data;
+  return val;
  }
 
  /**

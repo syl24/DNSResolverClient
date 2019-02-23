@@ -3,13 +3,15 @@ import java.util.regex.Pattern;
 import java.util.*;
 
 public class QueryFormat {
- String hostAddress;
  String queryString;
 
- public QueryFormat(String lookupString) {
-  this.hostAddress = lookupString;
+ public QueryFormat(DNSNode node) {
   headerFormat header = new headerFormat();
-  QuestionFormat question = new QuestionFormat(lookupString);
+  RecordType type = node.getType();
+  int code = type.getCode();
+  String hostString = node.getHostName();
+  System.out.println(code);
+  QuestionFormat question = new QuestionFormat(hostString, code);
   this.queryString = header.headerString + question.questionHeader;
  };
  private class headerFormat {
@@ -65,14 +67,14 @@ public class QueryFormat {
 
  private class QuestionFormat {
   String qname;
-  short qtype;
+  int qtype;
   short qclass;
   String questionHeader;
 
-  public QuestionFormat(String lookupString) {
+  public QuestionFormat(String lookupString, int typeCode) {
    String qString = formatQName(lookupString);
    this.qname = qString;
-   this.qtype = 1; // TODO A record but base on different type
+   this.qtype = typeCode;
    this.qclass = 1; // TODO // internet class
    this.questionHeader = qString + String.format("%04X", this.qtype) + String.format("%04X", this.qclass);
   }
