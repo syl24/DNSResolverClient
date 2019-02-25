@@ -1,7 +1,7 @@
 package ca.ubc.cs.cs317.dnslookup;
 import java.io.Console;
 import java.io.IOException;
-import ca.ubc.cs.cs317.dnslookup.QueryFormat;
+import ca.ubc.cs.cs317.dnslookup.DNSQuery;
 import java.io.UnsupportedEncodingException;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -11,6 +11,7 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.net.DatagramPacket;
 import java.math.BigInteger;
+import java.lang.*;
 import java.util.*;
 
 public class DNSLookupService {
@@ -18,12 +19,17 @@ public class DNSLookupService {
  private static final int DEFAULT_DNS_PORT = 53;
  private static final int MAX_INDIRECTION_LEVEL = 10;
  private static final int TIMEOUT = 5000;
+ private static final int MAX_RESPONSE_SIZE = 1024; // Max number of bytes of response buffer 
+ private static final int MAX_SEND_SIZE = 512; // max number of bytes to send
+
 
  private static InetAddress rootServer;
  private static boolean verboseTracing = false;
  private static DatagramSocket socket;
  private static String lookupString;
  private static RecordType qType;
+ private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
+
 
  private static DNSCache cache = DNSCache.getInstance();
 
@@ -182,9 +188,9 @@ public class DNSLookupService {
   * @return A set of resource records corresponding to the specific query requested.
   */
  private static Set < ResourceRecord > getResults(DNSNode node, int indirectionLevel) {
-  QueryFormat qf = new QueryFormat(node);
-  send_udp_message(qf.queryString);
-
+  DNSQuery qf = new DNSQuery(node);
+  qf.DNSIA = rootServer;
+  send_udp_message(qf);
   if (indirectionLevel > MAX_INDIRECTION_LEVEL) {
    System.err.println("Maximum number of indirection levels reached.");
    return Collections.emptySet();
@@ -195,20 +201,30 @@ public class DNSLookupService {
   return cache.getCachedResults(node);
  }
 
- private static String send_udp_message(String message) {
+ // udp in java send https://www.baeldung.com/udp-in-java
+ private static String send_udp_message(DNSQuery qf) {
+   String message = qf.queryString;
+   String hostName = qf.lookupName;
+   String typeInt = qf.type;
+   int typeCode = Integer.parseInt(typeInt);
   String query_message = message.replace(" ", "").replace("\n", ""); // guard
-  System.out.println(query_message);
-  byte[] data = hexStringToByteArray(query_message);
+  System.out.println("TO SEND: "+ query_message);
+  byte[] data = Bytehelper.hexStringToByteArray(message);
   DatagramPacket pack = new DatagramPacket(data, data.length, rootServer, DEFAULT_DNS_PORT);
   try {
    DatagramSocket ds = new DatagramSocket();
-   byte[] receiveBuf = new byte[data.length];
-   DatagramPacket rPack = new DatagramPacket(receiveBuf, data.length);
+   byte[] receiveBuf = new byte[1024];
+   DatagramPacket rPack = new DatagramPacket(receiveBuf, receiveBuf.length);
    ds.setSoTimeout(TIMEOUT);
    ds.send(pack);
    ds.receive(rPack);
-   String rString = new String(rPack.getData(), 0, rPack.getLength());
-   System.out.println(rString);
+   byte[] trimResBuffer = Bytehelper.byteTrim(rPack.getData()); // trim trailing 0s
+   String receiveStr = Bytehelper.bytesToHex(trimResBuffer);
+   System.out.println("Receive hexString: "+ receiveStr);
+   DNSResponse extractedResponse = new DNSResponse(trimResBuffer);
+   ResourceRecord rec = new ResourceRecord(hostName, RecordType.getByCode(typeCode), 1000, qf.DNSIA); //TODO change TTL to be from response and address
+   cache.addResult(rec);
+   FormatOutputTrace(qf, extractedResponse);
   } catch (SocketException err) {
    System.out.println(err);
   } catch (SocketTimeoutException err2) {
@@ -219,16 +235,73 @@ public class DNSLookupService {
   return "";
  }
 
+ private static void FormatOutputTrace(DNSQuery qf, DNSResponse qr) {
+     System.out.print("\n\n"); // begin with two blank lines
+     System.out.println("Query Id     " + qf.transID + " " + qf.lookupName + "  " + qf.type + "--> " + qf.DNSIA.getHostAddress()); // can i use???
+     System.out.println("Response ID: " + qr.responseID + " " + "Authoritative " + "= " + qr.authFlag);
+     String answerString = resourceRecordFormat("Answers", qr);
+     String nsString = resourceRecordFormat("Nameservers", qr);
+     String arString = resourceRecordFormat("Additional Info", qr);
+     System.out.println(answerString);
+     System.out.println(nsString);
+     System.out.println(arString);
+ }
+
+ private static String resourceRecordFormat(String type, DNSResponse qr) {
+   int answer;
+   switch(type) {
+     case "Answers":
+     answer = qr.numAnswers;
+     break;
+     case "Nameservers":
+     answer = qr.numNameservers;
+     break;
+     case "Additional Info":
+     answer = qr.numAddInfo;
+     break;
+     default:
+     answer = 9999; // something went wrong
+     break;
+   }
+   if (answer == 9999) throw new RuntimeException("Something went wrong in record Formatter");
+   String resString = String.format(" %s (%d)", type, answer);
+   return resString;
+ }
+
+ /*
  // https://www.tutorialspoint.com/convert-hex-string-to-byte-array-in-java
  private static byte[] hexStringToByteArray(String str) {
   byte[] val = new byte[str.length() / 2];
-  for (int i = 0; i < val.length; i++) {
+  for (int i = 0; i < val.length && i < MAX_SEND_SIZE; i++) {
    int index = i * 2;
    int j = Integer.parseInt(str.substring(index, index + 2), 16);
    val[i] = (byte) j;
   }
   return val;
  }
+
+ private static String bytesToHex(byte[] bytes) {
+    char[] hexChars = new char[bytes.length * 2];
+    for ( int j = 0; j < bytes.length; j++ ) {
+        int v = bytes[j] & 0xFF;
+        hexChars[j * 2] = hexArray[v >>> 4];
+        hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+    }
+    return new String(hexChars);
+}
+
+// eliminate trailing 0s of  byte array
+// https://stackoverflow.com/questions/17003164/byte-array-with-padding-of-null-bytes-at-the-end-how-to-efficiently-copy-to-sma
+private static byte[] byteTrim(byte[] bytes)
+{
+    int i = bytes.length - 1;
+    while (i >= 0 && bytes[i] == 0)
+    {
+        --i;
+    }
+    return Arrays.copyOf(bytes, i + 1);
+}
+*/
 
  /**
   * Retrieves DNS results from a specified DNS server. Queries are sent in iterative mode,
