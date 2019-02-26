@@ -19,7 +19,7 @@ public class DNSQuery {
   QuestionFormat question = new QuestionFormat(hostString, code);
   this.type = Integer.toString(code);
   this.lookupName = hostString;
-  this.transID = String.format("%02X", header.id);
+  this.transID = Integer.toHexString(header.id);
   this.queryString = header.headerString + question.questionHeader;
  };
  private static class headerFormat {
@@ -63,8 +63,8 @@ public class DNSQuery {
    String headerString = String.format("%02X", this.id);
    int queryParams1 = this.qr + this.opcode + this.aa + this.tc + this.rd;
    int queryParams2 = this.ra + this.z + this.rcode;
-   headerString += String.format("%02X", queryParams1); //1st byte of query params
-   headerString += String.format("%02X", queryParams2); // 2nd byte of query params
+   headerString += Integer.toHexString(queryParams1);
+   headerString += Integer.toHexString(queryParams2);
    headerString += String.format("%04X", qdcount); // qdcount two bytes
    headerString += String.format("%04X", ancount); // two bytes
    headerString += String.format("%04X", nscount); //two bytes

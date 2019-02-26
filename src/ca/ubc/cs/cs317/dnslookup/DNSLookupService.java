@@ -173,6 +173,7 @@ public class DNSLookupService {
  private static void findAndPrintResults(String hostName, RecordType type) {
 
   DNSNode node = new DNSNode(hostName, type);
+  //  is initial call always with 0 even if recordType is CNAME
   printResults(node, getResults(node, 0));
  }
 
@@ -190,19 +191,63 @@ public class DNSLookupService {
  private static Set < ResourceRecord > getResults(DNSNode node, int indirectionLevel) {
   DNSQuery qf = new DNSQuery(node);
   qf.DNSIA = rootServer;
-  send_udp_message(qf);
-  if (indirectionLevel > MAX_INDIRECTION_LEVEL) {
-   System.err.println("Maximum number of indirection levels reached.");
-   return Collections.emptySet();
+  DNSResponse qr = send_udp_message(qf);
+  if (qr.isAuth) {
+    // if DNS response is authorartive and is valid authoratative 
+    if (qr.validAuthFlag) {
+      return cache.getCachedResults(node);
+    } else {
+      // TODO handle this case 
+      throw new RuntimeException("Auth error: response is authoroatative and Rcode is 0: no error but no answers");
+    }
+    // TODO CATCH CASE WHERE VALIDAUTHRESPONSE IS FALSE AND AA BIT (1) + RCODE (0) *TERMINATE THERE ERROR
+    // terminate as reached valid auth response
+  } else {
+    // keep querying
+    System.out.println("I reached here in getResults");
+    if (indirectionLevel > MAX_INDIRECTION_LEVEL) {
+      System.err.println("Maximum number of indirection levels reached.");
+      return Collections.emptySet();
+     }
+     List<String> serverArr = qr.serversToQueryArr;
+     System.out.println(serverArr.size());
+     makeAdditionalQueries(serverArr);
   }
-
   // TODO To be completed by the student
-
   return cache.getCachedResults(node);
  }
 
+ private static boolean makeAdditionalQueries(List<String> serversArr) {
+   for (int i=0; i < serversArr.size(); i++) {
+     String ipAddress = serversArr.get(i);
+     DNSNode serverNode = new DNSNode(lookupString, qType);
+     DNSQuery qf = new DNSQuery(serverNode);
+     try {
+      qf.DNSIA = InetAddress.getByName(ipAddress);
+      DNSResponse qr = send_udp_message(qf);
+      if (qr.isAuth) {
+        // terminate 
+        System.out.println("Response is Authoratative - Terminate");
+        // TODO need to check if qr is validAuth as well?
+        return true;
+      } else {
+        List<String> responseQuerries = qr.serversToQueryArr;
+        boolean isAuthFound = makeAdditionalQueries(responseQuerries);
+        if (isAuthFound != false) {
+          return true;
+        }
+      }
+     }
+     catch(UnknownHostException err) {
+       throw new RuntimeException("shoouldn't reach here");
+     }
+   }
+   return false; 
+ }
+
  // udp in java send https://www.baeldung.com/udp-in-java
- private static String send_udp_message(DNSQuery qf) {
+ // return true if response is a valid authoratative answer response, else false (keep querying)
+ private static DNSResponse send_udp_message (DNSQuery qf) throws RuntimeException {
    String message = qf.queryString;
    String hostName = qf.lookupName;
    String typeInt = qf.type;
@@ -210,7 +255,7 @@ public class DNSLookupService {
   String query_message = message.replace(" ", "").replace("\n", ""); // guard
   System.out.println("TO SEND: "+ query_message);
   byte[] data = Bytehelper.hexStringToByteArray(message);
-  DatagramPacket pack = new DatagramPacket(data, data.length, rootServer, DEFAULT_DNS_PORT);
+  DatagramPacket pack = new DatagramPacket(data, data.length, qf.DNSIA, DEFAULT_DNS_PORT);
   try {
    DatagramSocket ds = new DatagramSocket();
    byte[] receiveBuf = new byte[1024];
@@ -221,10 +266,15 @@ public class DNSLookupService {
    byte[] trimResBuffer = Bytehelper.byteTrim(rPack.getData()); // trim trailing 0s
    String receiveStr = Bytehelper.bytesToHex(trimResBuffer);
    System.out.println("Receive hexString: "+ receiveStr);
-   DNSResponse extractedResponse = new DNSResponse(trimResBuffer);
-   ResourceRecord rec = new ResourceRecord(hostName, RecordType.getByCode(typeCode), 1000, qf.DNSIA); //TODO change TTL to be from response and address
-   cache.addResult(rec);
-   FormatOutputTrace(qf, extractedResponse);
+   try {
+    DNSResponse extractedResponse = new DNSResponse(trimResBuffer);
+    cacheDNSResponse(extractedResponse);
+    FormatOutputTrace(qf, extractedResponse);
+    return extractedResponse;
+   }
+   catch(RuntimeException err) {
+     System.out.println("Caught error here: " + err);
+   }
   } catch (SocketException err) {
    System.out.println(err);
   } catch (SocketTimeoutException err2) {
@@ -232,40 +282,88 @@ public class DNSLookupService {
   } catch (IOException e1) {
    System.out.println(e1);
   }
-  return "";
+  System.out.println("Shouldn't reach here send_udp");
+  throw new RuntimeException("Shouldn't reach here");
  }
 
- private static void FormatOutputTrace(DNSQuery qf, DNSResponse qr) {
+ private static void FormatOutputTrace(DNSQuery qs, DNSResponse qr) {
      System.out.print("\n\n"); // begin with two blank lines
-     System.out.println("Query Id     " + qf.transID + " " + qf.lookupName + "  " + qf.type + "--> " + qf.DNSIA.getHostAddress()); // can i use???
+     System.out.println("Query Id     " + qs.transID + " " + qs.lookupName + "  " + qs.type + "--> " + qs.DNSIA.getHostAddress()); // TODO???
      System.out.println("Response ID: " + qr.responseID + " " + "Authoritative " + "= " + qr.authFlag);
-     String answerString = resourceRecordFormat("Answers", qr);
-     String nsString = resourceRecordFormat("Nameservers", qr);
-     String arString = resourceRecordFormat("Additional Info", qr);
-     System.out.println(answerString);
-     System.out.println(nsString);
-     System.out.println(arString);
+     resourceRecordFormat("Answers", qr);
+     resourceRecordFormat("Nameservers", qr);
+     resourceRecordFormat("Additional Information", qr);
  }
 
- private static String resourceRecordFormat(String type, DNSResponse qr) {
-   int answer;
+ private static void cacheDNSResponse(DNSResponse qr) {
+  int numAnswers = qr.numAnswers; // 
+  int numNameservers = qr.numNameservers;
+  int numAddInfo = qr.numAddInfo;
+  List<Map<String, String>> answerMap = qr.answerRecords;
+  List<Map<String, String>> nsMap = qr.nameRecords;
+  List<Map<String, String>> addMap = qr.addRecords;
+  cacheRecords(numAnswers, answerMap);
+  cacheRecords(numNameservers, nsMap);
+  cacheRecords(numAddInfo, addMap);
+ }
+
+ private static void cacheRecords(int numRecords, List<Map<String, String>> recordList) {
+  for (int i =0; i < numRecords; i++) {
+    String recordName = recordList.get(i).get("name");
+    long recordTTL = Long.decode(recordList.get(i).get("ttl"));
+    int recordType = Integer.parseInt(recordList.get(i).get("rtype"));
+    String recordRData = recordList.get(i).get("rdata");
+    // if resource type is A or AAAA make  RData an InetAddress based on the raw IP address string
+    if (recordType == 1 || recordType == 28) {
+      try {
+      InetAddress InetRData = InetAddress.getByName(recordRData);
+      ResourceRecord newRecord = new ResourceRecord(recordName, RecordType.getByCode(recordType), recordTTL, InetRData);
+      cache.addResult(newRecord);
+      } 
+      catch (UnknownHostException err) {
+        // TODO
+      }
+    } else {
+      ResourceRecord newRecord = new ResourceRecord(recordName, RecordType.getByCode(recordType), recordTTL,  recordRData);
+      cache.addResult(newRecord);
+    }
+  }
+ }
+
+ private static void resourceRecordFormat(String type, DNSResponse qr) {
+   int numRecords;
+   String recordName;
+   long recordTTL;
+   int recordType;
+   String recordRData;
+   List<Map<String, String>> recordList = new ArrayList<Map<String, String>>();
    switch(type) {
      case "Answers":
-     answer = qr.numAnswers;
+     numRecords = qr.numAnswers;
+     recordList = qr.answerRecords;
      break;
      case "Nameservers":
-     answer = qr.numNameservers;
+     numRecords = qr.numNameservers;
+     recordList = qr.nameRecords;
      break;
-     case "Additional Info":
-     answer = qr.numAddInfo;
+     case "Additional Information":
+     numRecords = qr.numAddInfo;
+     recordList = qr.addRecords;
      break;
      default:
-     answer = 9999; // something went wrong
+     numRecords = 9999; // something went wrong, should never reach here
      break;
    }
-   if (answer == 9999) throw new RuntimeException("Something went wrong in record Formatter");
-   String resString = String.format(" %s (%d)", type, answer);
-   return resString;
+   if (numRecords == 9999) throw new RuntimeException("Something went wrong in record Formatter"); // should never throw
+   System.out.println(String.format("  %s (%d)", type, numRecords));
+   for (int i =0; i < numRecords; i++) {
+   recordName = recordList.get(i).get("name");
+   recordTTL = Long.decode(recordList.get(i).get("ttl"));
+   recordType = Integer.parseInt(recordList.get(i).get("rtype"));
+   recordRData = recordList.get(i).get("rdata");
+   ResourceRecord newRecord = new ResourceRecord(recordName, RecordType.getByCode(recordType), recordTTL, recordRData);
+   verbosePrintResourceRecord(newRecord, recordType);
+   }
  }
 
  /*
