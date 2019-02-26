@@ -1,7 +1,6 @@
 package ca.ubc.cs.cs317.dnslookup;
 import java.io.Console;
 import java.io.IOException;
-import ca.ubc.cs.cs317.dnslookup.DNSQuery;
 import java.io.UnsupportedEncodingException;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -191,6 +190,10 @@ public class DNSLookupService {
  private static Set < ResourceRecord > getResults(DNSNode node, int indirectionLevel) {
   DNSQuery qf = new DNSQuery(node);
   qf.DNSIA = rootServer;
+  Set<ResourceRecord> cacheResults = cache.getCachedResults(node);
+  if (!cacheResults.isEmpty()) {
+    return cacheResults;
+  } 
   DNSResponse qr = send_udp_message(qf);
   if (qr.isAuth) {
     // if DNS response is authorartive and is valid authoratative 

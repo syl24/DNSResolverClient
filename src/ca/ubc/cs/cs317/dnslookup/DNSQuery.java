@@ -1,6 +1,10 @@
 package ca.ubc.cs.cs317.dnslookup;
 import java.util.regex.Pattern;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.Buffer.*;
+import java.nio.ByteBuffer;
 import java.util.*;
 
 public class DNSQuery {
@@ -12,20 +16,31 @@ public class DNSQuery {
 
 
  public DNSQuery(DNSNode node) {
+   ByteArrayOutputStream queryStream = new ByteArrayOutputStream();
+    RecordType type = node.getType();
+    int code = type.getCode();
+    String hostString = node.getHostName();
   headerFormat header = new headerFormat();
-  RecordType type = node.getType();
-  int code = type.getCode();
-  String hostString = node.getHostName();
-  QuestionFormat question = new QuestionFormat(hostString, code);
+  QuestionFormat questionHeader = new QuestionFormat(hostString, code);
+  try {
+    queryStream.write(header.headerBytes);
+    queryStream.write(questionHeader.QuestionBytes);
+  }
+  catch(IOException er) {
+      // TODO
+  }
+  byte[] dnsQueryBytes = queryStream.toByteArray();
   this.type = Integer.toString(code);
   this.lookupName = hostString;
-  this.transID = Integer.toHexString(header.id);
-  this.queryString = header.headerString + question.questionHeader;
+  this.transID = header.id;
+  this.queryString = Bytehelper.bytesToHex(dnsQueryBytes);
  };
  private static class headerFormat {
+  byte[] headerBytes;  
+  private static int HEADER_SIZE = 12;
   private static int ID_MAX = 65535;
   private static int ID_MIN = 0;
-  int id;
+  String id;
   byte rd;
   byte tc;
   byte aa;
@@ -40,7 +55,7 @@ public class DNSQuery {
   short arcount;
   String headerString;
   public headerFormat() {
-   this.id = idGenerator();
+  // this.id = idGenerator();
    this.rd = 1; // TODO should be 0 but for now make 1
    this.opcode = 0;
    this.qr = 0;
@@ -51,7 +66,8 @@ public class DNSQuery {
    this.ancount = 0;
    this.nscount = 0;
    this.arcount = 0;
-   this.headerString = headerToHex();
+   createRequestHeader();
+   // this.headerString = headerToHex();
   }
 
   private int idGenerator() {
@@ -71,20 +87,77 @@ public class DNSQuery {
    headerString += String.format("%04X", arcount);
    return headerString;
   }
+private void createRequestHeader(){
+    ByteBuffer header = ByteBuffer.allocate(this.HEADER_SIZE);
+    byte[] randomID = new byte[2]; 
+    new Random().nextBytes(randomID);
+    this.id = Bytehelper.bytesToHex(randomID);
+    header.put(randomID);
+    header.put((byte)0x01); // 1st half of flags (0000 0001)
+    header.put((byte)0x00); // 2nd half of flags (0000 0000)
+    header.put((byte)0x00);
+    header.put((byte)0x01); // numbe of questions
+    //lines 3, 4, and 5 will be all 0s, which is what we want (ANCount, ARCOunt, NSCount)
+    this.headerBytes =  header.array();
+}
  }
 
  private static class QuestionFormat {
-  String qname;
-  int qtype;
-  short qclass;
-  String questionHeader;
+private ByteArrayOutputStream questionOutputStream = new ByteArrayOutputStream();
+  private final static int QUESTION_SIZE = 4; // question size without QNAME
+  private byte[] qname;
+  private byte[] qtype ; // q type 
+  private static final byte[] qclass = Bytehelper.hexStringToByteArray("0001"); //internet class
+  private int QName_Size;
+//  String questionHeader;
+  byte[] QuestionBytes;
 
   public QuestionFormat(String lookupString, int typeCode) {
    String qString = formatQName(lookupString);
-   this.qname = qString;
-   this.qtype = typeCode;
-   this.qclass = 1; // TODO // internet class
-   this.questionHeader = qString + String.format("%04X", this.qtype) + String.format("%04X", this.qclass);
+  //  this.QuestionBytes = new byte[this.QUESTION_SIZE + this.QName_Size];
+   this.qname = Bytehelper.hexStringToByteArray(qString);
+   try {
+    questionOutputStream.write(this.qname);
+    this.qtype = getQTypeBytes(typeCode);
+    questionOutputStream.write(this.qtype);
+    System.out.println("Qtype string: " + Bytehelper.bytesToHex(this.qtype));
+    questionOutputStream.write(this.qclass);
+    System.out.println("QClss string: " + Bytehelper.bytesToHex(this.qclass));
+    this.QuestionBytes = questionOutputStream.toByteArray();
+    System.out.println(Bytehelper.bytesToHex(this.QuestionBytes));
+   }
+   catch(IOException err) {
+       // TODO
+   }
+   // this.questionHeader = qString + String.format("%04X", this.qtype) + String.format("%04X", this.qclass);
+  }
+
+  private byte[] getQTypeBytes(int typeCode) {
+      byte[] qTypeBytes = new byte[2];
+      switch(typeCode) {
+          // A record
+          case 1:
+          qTypeBytes[0] = 0x0;
+          qTypeBytes[1] = 0x1;
+          break;
+          case 2:
+          qTypeBytes[0] = 0x0;
+          qTypeBytes[1] = 0x2;
+          break;
+          case 5:
+          qTypeBytes[0] = 0x0;
+          qTypeBytes[1] = 0x5;
+          break;
+          case 28:
+          qTypeBytes[0] = 0x0;
+          qTypeBytes[1] = 0x1C;
+          break;
+
+          default:
+          // TODO shouldnt reach here unless typeCode specified is not A, AAAA, CNAME, NS
+          throw new RuntimeException("Type code not supported " + typeCode);
+      }
+      return qTypeBytes;
   }
 
   private String formatQName(String lookupString) {
@@ -94,13 +167,16 @@ public class DNSQuery {
     int len = str.length();
     String hexLen = String.format("%02X", ((int) len));
     qString += hexLen;
+    this.QName_Size++;
     for (int j = 0; j < len; j++) {
      char character = str.charAt(j);
      String hexChar = String.format("%02X", (int) character);
      qString += hexChar;
+     this.QName_Size++;
     }
    }
-   qString += "00";
+   qString += "00"; // terminating byte
+   this.QName_Size++;
    return qString;
   }
  }
