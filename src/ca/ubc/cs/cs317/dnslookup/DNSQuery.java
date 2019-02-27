@@ -93,7 +93,7 @@ private void createRequestHeader(){
     new Random().nextBytes(randomID);
     this.id = Bytehelper.bytesToHex(randomID);
     header.put(randomID);
-    header.put((byte)0x01); // 1st half of flags (0000 0001)
+    header.put((byte)0x00); // 1st half of flags (0000 0000) (norecursion chnge right most bit to 1 if you want)
     header.put((byte)0x00); // 2nd half of flags (0000 0000)
     header.put((byte)0x00);
     header.put((byte)0x01); // numbe of questions
@@ -120,11 +120,11 @@ private ByteArrayOutputStream questionOutputStream = new ByteArrayOutputStream()
     questionOutputStream.write(this.qname);
     this.qtype = getQTypeBytes(typeCode);
     questionOutputStream.write(this.qtype);
-    System.out.println("Qtype string: " + Bytehelper.bytesToHex(this.qtype));
+    // System.out.println("Qtype string: " + Bytehelper.bytesToHex(this.qtype));
     questionOutputStream.write(this.qclass);
-    System.out.println("QClss string: " + Bytehelper.bytesToHex(this.qclass));
+    // System.out.println("QClss string: " + Bytehelper.bytesToHex(this.qclass));
     this.QuestionBytes = questionOutputStream.toByteArray();
-    System.out.println(Bytehelper.bytesToHex(this.QuestionBytes));
+    // System.out.println(Bytehelper.bytesToHex(this.QuestionBytes));
    }
    catch(IOException err) {
        // TODO

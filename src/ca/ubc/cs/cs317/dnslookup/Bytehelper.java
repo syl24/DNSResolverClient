@@ -40,6 +40,7 @@ public static byte[] byteTrim(byte[] bytes)
     {
         --i;
     }
+    // keep last 0 byte ??? // TODO make + 2
     return Arrays.copyOf(bytes, i + 1);
 }
 }

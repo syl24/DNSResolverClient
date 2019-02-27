@@ -3,6 +3,7 @@ import java.util.regex.Pattern;
 import java.util.stream.*;
 
 import javax.management.RuntimeErrorException;
+import java.nio.ByteBuffer;
 
 import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
@@ -19,16 +20,25 @@ int RCode;
 List<String> serversToQueryArr = new ArrayList<String>(); // listof servers to query based on name servers with corresponding ip addresses from additional info
 String authFlag; // for outputting in DNSLookupService
 boolean isAuth; // boolean for simplicity
+boolean queryNSFlag; // flag to determine whether or not to query nameservers as dead end reached
 boolean validAuthFlag; // determine if the authorative response is valid
-int numAnswers; // number of answers
-int numNameservers; // number of NS
-int numAddInfo; // number of AR
+int numAnswers; // number of answers in section
+int numNameservers; // number of NS in section
+int numAddInfo; // number of AR in section
+int numARecords;
+int numNSRecords;
 List<Map<String, String>> answerRecords = new ArrayList<Map<String, String>>();
 List<Map<String, String>> nameRecords = new ArrayList<Map<String, String>>();
 List<Map<String, String>> addRecords = new ArrayList<Map<String, String>>();
+List<Map<String, String>> aRecords = new ArrayList<>();
+List<Map<String, String>> nsRecords = new ArrayList<>();
+
+private final HashMap<Integer, Boolean> typesSupported = new HashMap();     
  private int currAddr =0; // starting offset
  public DNSResponse(byte[] responseBuffer) {
      this.responseBuffer = responseBuffer;
+     populateTypesSupported();
+    // System.out.println("Response buffer length: " + this.responseBuffer.length);
      byte[] headerArr = extractHeaderBytes(this.responseBuffer);
      parseHeader parsedHeader = new parseHeader(headerArr);
      this.RCode = parsedHeader.RCode;
@@ -53,14 +63,19 @@ List<Map<String, String>> addRecords = new ArrayList<Map<String, String>>();
         validateAuthResponse();
      } else {
          // if not authoratative answer get servers to query
+         // guard against when no servers left to query (no addRecords) terminate
+         setQueryNSFlag();
          getServersToQuery();
-         printServerArr();
+        // printServerArr();
      }
+     getAandNSRecords(1);
+     getAandNSRecords(2);
+     getAandNSRecords(3);
     // printRecordListVals(this.nameRecords);
     // printRecordListVals(this.addRecords);
-     System.out.println("answer record size: " + this.answerRecords.size());
-     System.out.println("name record size: " + this.nameRecords.size());
-     System.out.println("add record size: " + this.addRecords.size());
+    // System.out.println("answer record size: " + this.answerRecords.size());
+    // System.out.println("name record size: " + this.nameRecords.size());
+    // System.out.println("add record size: " + this.addRecords.size());
  };
  private class parseHeader {
      private final static int FLAGS_SIZE = 2; // two bytes
@@ -99,7 +114,7 @@ List<Map<String, String>> addRecords = new ArrayList<Map<String, String>>();
      }
      private void extractFlags() {
          byte[] flagBytes = readBytes(this.headerOffset, FLAGS_SIZE, this.headerArr);
-         System.out.println("Flags: " + Bytehelper.bytesToHex(flagBytes));
+        // System.out.println("Flags: " + Bytehelper.bytesToHex(flagBytes));
          this.headerOffset += FLAGS_SIZE;
          this.authBool = getBit(flagBytes[0], 2); // get the AA bit from the 1st byte of flagbytes
          this.RCode = flagBytes[1] & 0x0F; // get the last 4 bits of the 2nd byte for RCode
@@ -160,9 +175,9 @@ List<Map<String, String>> addRecords = new ArrayList<Map<String, String>>();
          extractQName();
          extractQType();
          extractQClass();
-         System.out.println("QNAME: " + QName);
-         System.out.println("QType: " + QType);
-         System.out.println("QClass: " + QClass);
+        // System.out.println("QNAME: " + QName);
+        // System.out.println("QType: " + QType);
+        // System.out.println("QClass: " + QClass);
      }
 
      private void extractQName() {
@@ -186,7 +201,7 @@ List<Map<String, String>> addRecords = new ArrayList<Map<String, String>>();
 
      private void extractQType() {
          String hexQType = Bytehelper.bytesToHex(readBytes(currAddr, QTYPE_SIZE, responseBuffer));
-         System.out.println("QType hex: " + hexQType);
+        // System.out.println("QType hex: " + hexQType);
          this.QType = convertTypeCode(Integer.parseInt(hexQType, 16));
          currAddr += QTYPE_SIZE;
      }
@@ -206,7 +221,6 @@ List<Map<String, String>> addRecords = new ArrayList<Map<String, String>>();
      Boolean pointerFlag;
      private int domainOffset;
 // this works for any number of elements:
-private final HashMap<Integer, Boolean> typesSupported = new HashMap();     
     private final static int POINTER_SIZE = 2;
      private final static int VARY_SIZE = 9999; // number of bytes to read for a variable length
      private final static int TYPE_SIZE = 2;
@@ -214,34 +228,34 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
      private final static int TTL_SIZE = 4;
      private final static int RDLENGTH_SIZE= 2;
      private final static int LEFT_BITS_POS = 7; // the init posistion of  the two  left bits of answer name
-     private final static int OFFSET_POS = 14;
+     private final static int OFFSET_POS = 1; // posistion from RHS where offset is
      private final static int OFFSET_SIZE = 14; // number of bits of the offset
 
      public parseResourceRecord() {
-         populateTypesSupported();
          extractResourceName();
          extractResourceType();
          extractResourceClass();
          extractTTL();
          extractRDLength();
          extractRDData();
-         System.out.println("Resource Name: " + this.resourceName);
-         System.out.println("Resource type: " + this.resourceType);
-         System.out.println("Resource class: " + this.resourceClass);
-         System.out.println("Resource TTL: " + this.TTL);
-         System.out.println("RD Length: " + this.RDLength);
-         System.out.println("RD Data: " + this.RData);
+        // System.out.println("Resource Name: " + this.resourceName);
+        // System.out.println("Resource type: " + this.resourceType);
+        // System.out.println("Resource class: " + this.resourceClass);
+        // System.out.println("Resource TTL: " + this.TTL);
+        // System.out.println("RD Length: " + this.RDLength);
+        // System.out.println("RD Data: " + this.RData);
      }
 
      private void extractResourceName() {
          // resoure name is never a literal (non label)
      getDomainOffset(currAddr);
-     System.out.println("Current offset resource name: " + currAddr);
-     System.out.println("Domain offset resource name: " + this.domainOffset);
+    // System.out.println("Current offset resource name: " + currAddr);
+    // System.out.println("Domain offset resource name: " + this.domainOffset);
      // resource name is label
      if (this.domainOffset == currAddr) {
          // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
-         HashMap<String, String> nameMap = extractALabel(this.domainOffset);
+         System.out.println("when do I reach here");
+         HashMap<String, String> nameMap = extractALabel(currAddr);
          this.resourceName = nameMap.get("name");
          currAddr = Integer.parseInt(nameMap.get("offset")); // set the new offset
      } else {
@@ -250,34 +264,34 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
          HashMap<String, String> nameMap = extractALabel(this.domainOffset);
          this.resourceName = nameMap.get("name");  
         }
-        System.out.println("Current offset after parse Name: " + currAddr);  
+       // System.out.println("Current offset after parse Name: " + currAddr);  
        }
 
      private void extractRDData() {
      // exactly the same as parsing the resoucename and RData 
 
      int typeCode = Integer.parseInt(this.resourceType);
-     if (!this.typesSupported.containsKey(typeCode)) {
-         // skip record (RData as type not supported)
+     if (!typesSupported.containsKey(typeCode)) {
+         // skip record (RData as type not supported) TODO
          currAddr += RDLENGTH_SIZE;
          return;
      }
-     boolean isRDataLabel = this.typesSupported.get(typeCode);
+     boolean isRDataLabel = typesSupported.get(typeCode);
      if (isRDataLabel) {
          // if rdata is a label handle label case
         getDomainOffset(currAddr);
-        System.out.println("Current offset RData: " + currAddr);
-        System.out.println("Domain offset RData: " + this.domainOffset);    // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
+       // System.out.println("Current offset RData: " + currAddr);
+       // System.out.println("Domain offset RData: " + this.domainOffset);    // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
          HashMap<String, String> nameMap = extractALabel(this.domainOffset);
          this.RData = nameMap.get("name");
          currAddr = Integer.parseInt(nameMap.get("offset")); // set the new offset
-         System.out.println("Domain offset AFTER RData: " + currAddr);
+        // System.out.println("Domain offset AFTER RData: " + currAddr);
      }
  else {
          // resource name is a literal treat as real string (non -label case)
          extractANonLabel(currAddr, this.RDLength);
         }
-        System.out.println("Current offset after parse Record: " + this.RData + " | " + currAddr);    
+       // System.out.println("Current offset after parse Record: " + this.RData + " | " + currAddr);    
      }
 
      private void getDomainOffset(int offset) {
@@ -289,10 +303,18 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
                 System.out.println("domain offset is: " + this.domainOffset);
                return ;
            } else {
-               offset += 1;
-               int hexExtractOffset = responseBuffer[offset] & 0xFF;
-               getDomainOffset(hexExtractOffset);
+               byte[] messageBytes = new byte[2];
+               messageBytes[0] = responseBuffer[offset];
+               messageBytes[1] = responseBuffer[offset + 1];
+            int convertedMessageInt = Integer.parseInt(Bytehelper.bytesToHex(messageBytes), 16);
+            int extractedOffset = extractOffset(convertedMessageInt);
+            getDomainOffset(extractedOffset);
            }
+     }
+
+     private int extractOffset(int message) {
+        int offset = bitExtracted(message, OFFSET_SIZE, OFFSET_POS);
+        return offset;
      }
      
      /*
@@ -300,8 +322,8 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
          // exactly the same as parsing the resoucename and RData 
          field = field == "name"? this.resourceName : this.RData;
          getDomainOffset(currAddr);
-         System.out.println("Current offset: " + currAddr);
-         System.out.println("Domain offset: " + this.domainOffset);
+        // System.out.println("Current offset: " + currAddr);
+        // System.out.println("Domain offset: " + this.domainOffset);
          // resource name is label
          if (this.domainOffset == currAddr) {
              // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
@@ -314,16 +336,9 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
              HashMap<String, String> nameMap = extractALabel(this.domainOffset);
              field = nameMap.get("name");  
             }
-            System.out.println("Current offset after parse Name: " + currAddr);
+           // System.out.println("Current offset after parse Name: " + currAddr);
      }
      */
-
-     private void populateTypesSupported() {
-         this.typesSupported.put(1, false); // A record not a label
-         this.typesSupported.put(2, true); // NS record is label
-         this.typesSupported.put(5, true); // CNAME is label
-         this.typesSupported.put(28, false); // AAAA not label
-     }
 
      // label is defined as a non-string literal (E.g has pointer or label or combination of both)
      private HashMap<String,  String> extractALabel(int offset) {
@@ -338,8 +353,11 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
             try {
                String labelString = new String(label_bytes, "US-ASCII");
                pointerName += labelString + ".";
+              // System.out.println(labelString);
                curByte = responseBuffer[offset] & 0xFF; // cast to int
                pointerFlag = isPointer(curByte);
+              System.out.println("pointer flag: " + pointerFlag);
+            System.out.println("cur byte: " + curByte);
             }
             catch (UnsupportedEncodingException err) {
                 // TODO
@@ -357,7 +375,8 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
             return labelMap;
         }
         // label with terminating 0 byte
-        offset += 1; // set offset after terminating byte
+       // System.out.println("Reached label with terminating byte");
+        offset += 1;
         String formatString = removeLastChar(pointerName);
         labelMap.put("name", formatString); /// remove last "." character
         labelMap.put("offset", Integer.toString(offset));
@@ -382,7 +401,7 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
         String typeString = Bytehelper.bytesToHex(readBytes(currAddr, TYPE_SIZE, responseBuffer));
         currAddr += TYPE_SIZE;
         this.resourceType = Integer.toString(Integer.parseInt(typeString, 16)); // decimal representation
-        System.out.println("Resouce type is: " + convertTypeCode(Integer.parseInt(this.resourceType)));
+       // System.out.println("Resouce type is: " + convertTypeCode(Integer.parseInt(this.resourceType)));
     }
 
     private void extractResourceClass() {
@@ -483,7 +502,7 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
          default:
          n = 0; // something went wrong
      }
-     System.out.println("Number of " + type + " " + n);
+    // System.out.println("Number of " + type + " " + n);
      while (i < n && currAddr < responseBuffer.length) {
         HashMap<String, String> recordInfo = new HashMap();
         parseResourceRecord resource = new parseResourceRecord();
@@ -498,7 +517,7 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
         System.out.println("Inserting into class into map: " + resource.resourceClass);
         System.out.println("Inserting into rtype into map: " + resource.resourceType);
         recordList.add(recordInfo);
-        System.out.println("Current offset after parse resource: " + currAddr);
+       System.out.println("Current offset after parse record resource: " + currAddr);
         i++;
      }
      System.out.println("Current offset after parse all resources for type: " + type + " " + currAddr);
@@ -508,15 +527,53 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
 
  private void printRecordListVals(List<Map<String, String>> recordList) {
      for (int i=0; i < recordList.size(); i++) {
-        System.out.println("rdata val : " + recordList.get(i).get("rdata"));
-        System.out.println("ttl val: " + recordList.get(i).get("ttl"));
-        System.out.println("name val: " + recordList.get(i).get("name"));
-        System.out.println("class val: " + recordList.get(i).get("class"));
-        System.out.println("rtype val: " + recordList.get(i).get("rtype"));
+       // System.out.println("rdata val : " + recordList.get(i).get("rdata"));
+       // System.out.println("ttl val: " + recordList.get(i).get("ttl"));
+       // System.out.println("name val: " + recordList.get(i).get("name"));
+       // System.out.println("class val: " + recordList.get(i).get("class"));
+       // System.out.println("rtype val: " + recordList.get(i).get("rtype"));
      }
  }
 
- private void printServerArr () {
+ // get the A and NS records with the supplied section type
+ private void getAandNSRecords(int sectionType) {
+     int num;
+     List<Map<String, String>> resourceList;
+     switch(sectionType) {
+         case 1:
+         num =this. numAnswers;
+         resourceList = this.answerRecords;
+         break;
+         case 2:
+         num = this.numNameservers;
+         resourceList = this.nameRecords;
+         break;
+         case 3:
+         num = this.numAddInfo;
+         resourceList = this.addRecords;
+         break;
+         default:
+         throw new RuntimeException("Should not reach here, error with section type code");
+     }
+     for (int i =0; i < num; i++) {
+         Map<String, String> resourceMap = resourceList.get(i);
+         String rType = resourceMap.get("rtype");
+            int convertRTypecode = Integer.parseInt(rType);
+            // a record
+            if (convertRTypecode == 1) {
+                this.numARecords++;
+                this.aRecords.add(resourceMap);
+     } else {
+         // ns record
+         if (convertRTypecode == 2) {
+             this.numNSRecords++;
+             this.nsRecords.add(resourceMap);
+         }
+     }
+    }
+ }
+
+ public void printServerArr () {
     for (int i=0; i < serversToQueryArr.size(); i++) {
        System.out.println("ipAddress val: " + serversToQueryArr.get(i));
     }
@@ -552,12 +609,25 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
      return authBool;
  }
 
+ // determine if a "dead-end "is reached. This means no A/AAAA records are present, No answers, only name servers are provided
+ private void setQueryNSFlag() {
+    // TODO better guard with the presence of AA records???
+     this.queryNSFlag = (numAddInfo == 0) && (numAnswers == 0) && (numNameservers > 0);
+ }
+
  private byte[] extractHeaderBytes(byte[] buffer) {
      byte[] headerBytes = readResponseBuff(HEADER_SIZE, buffer);
      String hexResString = Bytehelper.bytesToHex(headerBytes);
-     System.out.println("Response header HEXstring: " + hexResString);
+    // System.out.println("Response header HEXstring: " + hexResString);
      return headerBytes;
  }
+
+ private void populateTypesSupported() {
+    this.typesSupported.put(1, false); // A record not a label
+    this.typesSupported.put(2, true); // NS record is label
+    this.typesSupported.put(5, true); // CNAME is label
+    this.typesSupported.put(28, false); // AAAA not label
+}
 
 
 private byte[] readBytes(int start, int num, byte[] bytes) {
@@ -577,7 +647,7 @@ private int getBit (byte b, int position) {
 }
 
 // https://www.geeksforgeeks.org/extract-k-bits-given-position-number/
-// extract n bits from position pos inclusive
+// extract n bits from position pos inclusive, pos initial starts at RHS
 private int bitExtracted(int number, int n, int pos) 
     { 
         return (((1 << n) - 1) & (number >> (pos - 1))); 
