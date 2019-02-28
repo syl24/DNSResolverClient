@@ -268,12 +268,10 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
        }
 
      private void extractRDData() {
-     // exactly the same as parsing the resoucename and RData 
-
      int typeCode = Integer.parseInt(this.resourceType);
      if (!typesSupported.containsKey(typeCode)) {
          // skip record (RData as type not supported) TODO
-         currAddr += RDLENGTH_SIZE;
+         currAddr += this.RDLength;
          return;
      }
      boolean isRDataLabel = typesSupported.get(typeCode);
@@ -284,14 +282,18 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
        // System.out.println("Domain offset RData: " + this.domainOffset);    // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
          HashMap<String, String> nameMap = extractALabel(this.domainOffset);
          this.RData = nameMap.get("name");
-         currAddr = Integer.parseInt(nameMap.get("offset")); // set the new offset
+         // currAddr += this.RDLength;
+         //currAddr = Integer.parseInt(nameMap.get("offset")); // set the new offset
         // System.out.println("Domain offset AFTER RData: " + currAddr);
      }
  else {
+     // TODO SET THE OFFSET OF RDDATA
          // resource name is a literal treat as real string (non -label case)
          extractANonLabel(currAddr, this.RDLength);
         }
-       // System.out.println("Current offset after parse Record: " + this.RData + " | " + currAddr);    
+        currAddr += this.RDLength;
+
+        System.out.println("Current offset after parse Record RData: " + this.RData + " | " + currAddr);    
      }
 
      private void getDomainOffset(int offset) {
@@ -362,6 +364,10 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
             catch (UnsupportedEncodingException err) {
                 // TODO
             }
+            catch(ArrayIndexOutOfBoundsException err1) {
+                System.err.println("Ileggaloffset access of responseBuffer: Should not occur: " + offset);
+                System.err.println(err1);
+            }
         }
         if (pointerFlag == true) {
             // Name with terminating pointer
@@ -390,7 +396,7 @@ private final HashMap<Integer, Boolean> typesSupported = new HashMap();
             byte[] ipBytes = readBytes(offset, num, responseBuffer);
             InetAddress convertedAddress = InetAddress.getByAddress(ipBytes);
             this.RData = convertedAddress.getHostAddress();
-            currAddr += num;
+           // currAddr += num;
         }
         catch(UnknownHostException err) {
             // TODO

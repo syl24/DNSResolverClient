@@ -173,7 +173,7 @@ public class DNSLookupService {
 
   DNSNode node = new DNSNode(hostName, type);
   //  is initial call always with 0 even if recordType is CNAME
-  printResults(node, getResults(node, 0));
+  printResults(node, getResults(node, 0, rootServer));
  }
 
  /**
@@ -187,9 +187,9 @@ public class DNSLookupService {
   *                         returns an empty set.
   * @return A set of resource records corresponding to the specific query requested.
   */
- private static Set < ResourceRecord > getResults(DNSNode node, int indirectionLevel) {
+ private static Set < ResourceRecord > getResults(DNSNode node, int indirectionLevel, InetAddress DNSIA) {
   DNSQuery qf = new DNSQuery(node);
-  qf.DNSIA = rootServer;
+  qf.DNSIA = DNSIA;
   Set<ResourceRecord> cacheResults = cache.getCachedResults(node);
   if (!cacheResults.isEmpty()) {
     return cacheResults;
@@ -239,8 +239,15 @@ public class DNSLookupService {
           // INFINIT recursion case ???
           List<Map<String, String>> nsMap = qr.nameRecords;
           String nameServerIP = queryNameRecords(nsMap);
-          DNSNode newNode = new DNSNode(nameServerIP, qType);
-          getResults(newNode, 0);
+          String lookupStr = serverNode.getHostName();
+          DNSNode newNode = new DNSNode(lookupStr, qType);
+          try {
+          InetAddress nameServerIA = InetAddress.getByName(nameServerIP);
+          getResults(newNode, 0, nameServerIA);
+          } 
+          catch(UnknownHostException err) {
+            // TODO
+          }
           return true;
         }
         List<String> responseQuerries = qr.serversToQueryArr;
@@ -262,12 +269,17 @@ public class DNSLookupService {
     String hostString = nameRecords.get(i).get("rdata");
     DNSNode nsNode = new DNSNode(hostString, qType);
     boolean nameServerFound = findNameServerIP(nsNode, rootServer, MAX_INDIRECTION_LEVEL);
+    System.out.println("nameServerFound: " + nameServerFound);
     // if name server is found consult the cache associated with the node
     if (nameServerFound) {
       Object[] nsRecordsArr = cache.getCachedResults(nsNode).toArray();
+      String nsNodeName = nsNode.getHostName();
+      System.out.println("Name server found with hostname: "+ nsNode.getHostName());
       for (Object recordObj : nsRecordsArr) {
         ResourceRecord record = (ResourceRecord)recordObj;
-        if (record.getTextResult() == nsNode.getHostName()) {
+        String recordName = record.getHostName();
+        System.out.println(record.getHostName());
+        if (Objects.equals(recordName, nsNodeName)) {
           System.out.println("CACHE CONTAINS THE NAME SERVER IP");
           return record.getTextResult();
         }
@@ -280,51 +292,59 @@ public class DNSLookupService {
   // return true if name server IP is found otherwise false
   private static boolean findNameServerIP (DNSNode node, InetAddress queryIA, int indirectionLevel) {
   DNSQuery qf = new DNSQuery(node);
+  String nodeString = node.getHostName();
+  int curIndirectionLvl  = indirectionLevel;
   qf.DNSIA = queryIA;
   Set<ResourceRecord> cacheResults = cache.getCachedResults(node);
   if (!cacheResults.isEmpty()) {
     return true; //
   } 
   DNSResponse qr = send_udp_message(qf);
-    // if DNS response is authorartive and is valid authoratative 
-    if (qr.numARecords > 0 && qr.numNSRecords > 0) {
-      if (qr.numARecords != qr.numNSRecords) throw new RuntimeException("number of name records and add records should be the same");
-      // both name servers and add info length should be the same
-      for (int i =0; i< qr.numARecords && i < qr.numNSRecords; i++) {
-        String nsRData = qr.nsRecords.get(i).get("rdata");
-        String addName = qr.aRecords.get(i).get("name");
-        if (nsRData == addName) {
-          System.out.println("Name server found");
-          // name server found
+  boolean aRecordContainsNS = aRecordsContainsNSIP(nodeString, qr.aRecords);
+  if (aRecordContainsNS) {
+    return true;
+  } else {
+    // continue to query
+    List<String> serversArr = qr.serversToQueryArr;
+    for (int i =0; i< serversArr.size(); i++) {
+      if (indirectionLevel > MAX_INDIRECTION_LEVEL) {
+        System.err.println("Indirect lvl: " + indirectionLevel);
+        System.err.println("Maximum number of indirection levels reached FOR RESOLVING NAME SERVER.");
+        return true;
+       }
+       try {
+        System.out.println("Resolving name servers: Servers to query");
+        qr.printServerArr();
+        System.out.println(serversArr.size());
+        InetAddress serverIA = InetAddress.getByName(serversArr.get(i));
+        boolean isFound = findNameServerIP(node, serverIA, i);
+        if (isFound != false) {
           return true;
-        } else {
-          if (indirectionLevel > MAX_INDIRECTION_LEVEL) {
-            System.err.println("Maximum number of indirection levels reached FOR RESOLVING NAME SERVER.");
-            return true;
-           }
-           List<String> serverArr = qr.serversToQueryArr;
-           System.out.println("Resolving name servers: Servers to query");
-           qr.printServerArr();
-           System.out.println(serverArr.size());
-           for (int j =0; j  < serverArr.size(); j++) {
-             try {
-             InetAddress serverIA = InetAddress.getByName(serverArr.get(j));
-            boolean isFound = findNameServerIP(node, serverIA, indirectionLevel + 1);
-            if (isFound != false) {
-              return true;
-            }
-          }
-          catch(UnknownHostException err) {
-            throw new RuntimeException(err);
-            // TODO
-          }
-           }
-           return false;
         }
-      }
-      return false;
+       }
+       catch(UnknownHostException err) {
+         // TODO
+         System.err.println(err);
+       }
+    }
+    return false;
   }
-  return false; // not found
+}
+
+private static boolean aRecordsContainsNSIP(String NSName,  List<Map<String, String>> aRecords) {
+  System.out.println("The NSName " + NSName);
+  String cleanNSName = NSName.trim();
+  for (int i=0; i < aRecords.size(); i++) {
+    Map<String, String> aRecord = aRecords.get(i);
+    String aRecordName = aRecord.get("name").trim();
+    String aIPV4 = aRecord.get("rdata");
+    System.out.println(aRecordName);
+    if (Objects.equals(aRecordName, cleanNSName)) {
+      System.out.println("A records contains " + NSName + " with IPV4 address " + aIPV4);
+      return true;
+    }
+  }
+  return false;
 }
 
 private void queryNameServerIP() {
