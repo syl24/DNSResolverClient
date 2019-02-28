@@ -74,7 +74,6 @@ public class DNSQuery {
    Random r = new Random();
    return r.nextInt((ID_MAX - ID_MIN) + 1) + ID_MIN;
   }
-
   private String headerToHex() {
    String headerString = String.format("%02X", this.id);
    int queryParams1 = this.qr + this.opcode + this.aa + this.tc + this.rd;
@@ -180,4 +179,30 @@ private ByteArrayOutputStream questionOutputStream = new ByteArrayOutputStream()
    return qString;
   }
  }
+
+ public String convertType(int i) {
+  switch(i) {
+    case 1:
+    return "A";
+    case 2:
+    return "NS";
+    case 5:
+    return "CNAME";
+    case 6:
+    return "SOA";
+    case 11:
+    return "WKS";
+    case 12:
+    return "PTR";
+    case 15:
+    return "MX";
+    case 33:
+    return "SRV";
+    case 28:
+    return "AAAA";
+    default:
+    System.out.println("Unsupported type supplied, default to A");
+    return "A" ;// unsupported type supplied
+  }
+}
 }

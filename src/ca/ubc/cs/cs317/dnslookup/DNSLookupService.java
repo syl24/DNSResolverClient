@@ -173,7 +173,7 @@ public class DNSLookupService {
 
   DNSNode node = new DNSNode(hostName, type);
   //  is initial call always with 0 even if recordType is CNAME
-  printResults(node, getResults(node, 0, rootServer));
+  printResults(node, getResults(node, rootServer));
  }
 
  /**
@@ -186,8 +186,10 @@ public class DNSLookupService {
   *                         reaches MAX_INDIRECTION_LEVEL, the function prints an error message and
   *                         returns an empty set.
   * @return A set of resource records corresponding to the specific query requested.
+
+  // NOTEl TOOK OUT INDIRECTION LEVEL
   */
- private static Set < ResourceRecord > getResults(DNSNode node, int indirectionLevel, InetAddress DNSIA) {
+ private static Set < ResourceRecord > getResults(DNSNode node, InetAddress DNSIA) {
   DNSQuery qf = new DNSQuery(node);
   qf.DNSIA = DNSIA;
   Set<ResourceRecord> cacheResults = cache.getCachedResults(node);
@@ -198,7 +200,42 @@ public class DNSLookupService {
   if (qr.isAuth) {
     // if DNS response is authorartive and is valid authoratative 
     if (qr.validAuthFlag) {
-      return cache.getCachedResults(node);
+      // if answer contains no CNAMES terminate
+        // TODO where to cache?
+      //  cacheDNSResponse(qr);
+       System.out.println("Response is Authoratative (valid)");
+       boolean isCNAME = isLookupCNAME(node);
+       if (!isCNAME) {
+         // lookupString is not CNAME and desired results are in cache
+        System.out.println("Response is Authoratative and contains desired results (type and hoststring) - Terminate");
+        return cache.getCachedResults(node);
+      } else {
+         System.out.println("Response contains CNAME - require resolve");
+         // lookupString is a CNAME or desired results are not in cache
+         String serverNodeStr = node.getHostName();
+         RecordType CNameType = RecordType.CNAME;
+         RecordType serverNodeType = node.getType();
+         // make a CNAME node for the lookupstring a since we know it is a CNAME
+         DNSNode CNameNode = new DNSNode(serverNodeStr, CNameType);
+         Set<ResourceRecord> returnCache = resolveCNAME(CNameNode, serverNodeType);
+         printCacheContents(returnCache);
+         if (!returnCache.isEmpty()) {
+           // TODO CACHE ADDITONAL CNAMES
+           for(ResourceRecord record : returnCache) {
+             InetAddress ipAddress = record.getInetResult(); // should be an ip address
+             ResourceRecord cacheRecord = new ResourceRecord(serverNodeStr, serverNodeType, record.getTTL(), ipAddress);
+             verbosePrintResourceRecord(cacheRecord, serverNodeType.getCode());
+             cache.addResult(cacheRecord);
+           }
+          return returnCache;
+         } else {
+          System.out.println("Make additional queries for cnames");
+           // TODO make additional query
+          return  returnCache;
+         }
+        } 
+      // TODO where to cahce???
+      // cacheDNSResponse(qr);
     } else {
       // TODO handle this case 
       throw new RuntimeException("Auth error: response is authoroatative and Rcode is 0: no error but no answers");
@@ -207,10 +244,6 @@ public class DNSLookupService {
     // terminate as reached valid auth response
   } else {
     // keep querying
-    if (indirectionLevel > MAX_INDIRECTION_LEVEL) {
-      System.err.println("Maximum number of indirection levels reached.");
-      return Collections.emptySet();
-     }
      List<String> serverArr = qr.serversToQueryArr;
      System.out.println("Servers to query");
      qr.printServerArr();
@@ -218,7 +251,7 @@ public class DNSLookupService {
      makeAdditionalQueries(serverArr, node);
   }
   // TODO To be completed by the student
-  return cache.getCachedResults(node);
+   return cache.getCachedResults(node);
  }
 
  private static boolean makeAdditionalQueries(List<String> serversArr, DNSNode serverNode) {
@@ -230,10 +263,49 @@ public class DNSLookupService {
       System.out.println("Querying Ip address: " + ipAddress);
       DNSResponse qr = send_udp_message(qf);
       if (qr.isAuth) {
-        // terminate 
-        System.out.println("Response is Authoratative - Terminate");
-        // TODO need to check if qr is validAuth as well?
+        if (qr.validAuthFlag) {
+       // if answer contains no CNAMES terminate
+        // TODO where to cache?
+         // cacheDNSResponse(qr);
+       System.out.println("Response is Authoratative (valid)");
+       boolean isCNAME = isLookupCNAME(serverNode);
+       if (!isCNAME) {
+         // lookupString is not CNAME and desired results are in cache
+        System.out.println("Response is Authoratative and contains desired results (type and hoststring) - Terminate");
         return true;
+      } else {
+         System.out.println("Response contains CNAME - require resolve");
+         // lookupString is a CNAME or desired results are not in cache
+         String serverNodeStr = serverNode.getHostName();
+         RecordType CNameType = RecordType.CNAME;
+         RecordType serverNodeType = serverNode.getType();
+         // make a CNAME node for the lookupstring a since we know it is a CNAME
+         DNSNode CNameNode = new DNSNode(serverNodeStr, CNameType);
+         Set<ResourceRecord> returnCache = resolveCNAME(CNameNode, serverNodeType);
+         printCacheContents(returnCache);
+         
+         if (!returnCache.isEmpty()) {
+           // TODO CACHE ADDITONAL CNAMES
+           for(ResourceRecord record : returnCache) {
+             long recordTTL = record.getTTL();
+             int typeCode = serverNodeType.getCode();
+             InetAddress recordIA = record.getInetResult(); // should be an ip address
+             ResourceRecord cacheRecord = new ResourceRecord(serverNodeStr, serverNodeType, recordTTL, recordIA);
+             verbosePrintResourceRecord(cacheRecord, typeCode);
+             cache.addResult(cacheRecord);
+           }
+          return true;
+         } else {
+           // TODO make additional query
+           System.out.println("Make additional queries for cnames");
+          return  true;
+         }
+        } 
+      // TODO where to cahce???
+      // cacheDNSResponse(qr);
+        } else{
+          throw new RuntimeException("Auth error: response is authoroatative and Rcode is 0: no error but no answers");
+        }
       } else {
         if (qr.queryNSFlag) {
           // INFINIT recursion case ???
@@ -243,8 +315,8 @@ public class DNSLookupService {
           DNSNode newNode = new DNSNode(lookupStr, qType);
           try {
           InetAddress nameServerIA = InetAddress.getByName(nameServerIP);
-          getResults(newNode, 0, nameServerIA);
-          } 
+          getResults(newNode, nameServerIA);
+          }
           catch(UnknownHostException err) {
             // TODO
           }
@@ -264,6 +336,54 @@ public class DNSLookupService {
    return false; 
  }
 
+ // if the node (hoststring and type) desired does not exist in the cache
+ // the answer should have resolved to a CNAME (lookupString is type CNAME then)
+ private static boolean isLookupCNAME(DNSNode node) {
+   Set<ResourceRecord> nodeRecords = cache.getCachedResults(node);
+   String nodeHostString = node.getHostName();
+   RecordType cNAME = RecordType.CNAME;
+   DNSNode cnameNode = new DNSNode(nodeHostString, cNAME);
+   Set<ResourceRecord> cnameRecord = cache.getCachedResults(cnameNode); // extra guard to check if the host string and CNAME type exists in cache
+   // if the desired host string and type is not found in cache and the CNAME type of the host string is not found in cache something went wrong
+   return nodeRecords.isEmpty() && !cnameRecord.isEmpty();
+ }
+
+ private static Set<ResourceRecord> resolveCNAME(DNSNode node, RecordType dType) {
+  String nodeHostString = node.getHostName();
+  RecordType desiredType = dType;
+  System.out.println(nodeHostString);   
+   Set<ResourceRecord> cacheResults = cache.getCachedResults(node);
+   printCacheContents(cacheResults);
+   // if node hoststring is not a CNAME and is found in cache with desired type resolve
+   // 1st case with desired type in answer with multiple CNAMES (or single)\
+   DNSNode checkDesiredNode = new DNSNode(nodeHostString, dType);
+   Set<ResourceRecord> desiredCacheResults = cache.getCachedResults(checkDesiredNode);
+   if (cacheResults.isEmpty() && !desiredCacheResults.isEmpty()) {
+     // Case 1: multiple CNAMES with correct types in answer
+     System.out.println("case where CNAME is resolved in answer section");
+     return desiredCacheResults;
+   } else {
+     // case with Just CNAMES in answer, need to perform additonal query
+     if (cacheResults.isEmpty() && desiredCacheResults.isEmpty()) {
+      System.out.println("case where only CNAMES in answer section - perform additional query");
+       // TODO
+       return desiredCacheResults; // should return an empty cache
+     } else {
+            // otherwise keep checking the cache with the names in answer section
+     String newNodeStr = "";
+     RecordType CNAMEType = RecordType.CNAME;
+     for (ResourceRecord record : cacheResults) {
+            // this should only iterate once
+       newNodeStr = record.getTextResult();
+       System.out.println("Iterating once");
+     }
+     DNSNode cNAMENode = new DNSNode(newNodeStr, CNAMEType);
+     Set<ResourceRecord> resultRecords = resolveCNAME(cNAMENode, dType);
+     return resultRecords;
+     }
+   }
+  }
+
  private static String queryNameRecords(List<Map<String, String>> nameRecords) {
    for (int i=0; i < nameRecords.size(); i++) {
     String hostString = nameRecords.get(i).get("rdata");
@@ -272,11 +392,10 @@ public class DNSLookupService {
     System.out.println("nameServerFound: " + nameServerFound);
     // if name server is found consult the cache associated with the node
     if (nameServerFound) {
-      Object[] nsRecordsArr = cache.getCachedResults(nsNode).toArray();
+      Set<ResourceRecord> nsRecordsSet = cache.getCachedResults(nsNode);
       String nsNodeName = nsNode.getHostName();
       System.out.println("Name server found with hostname: "+ nsNode.getHostName());
-      for (Object recordObj : nsRecordsArr) {
-        ResourceRecord record = (ResourceRecord)recordObj;
+      for (ResourceRecord record : nsRecordsSet) {
         String recordName = record.getHostName();
         System.out.println(record.getHostName());
         if (Objects.equals(recordName, nsNodeName)) {
@@ -331,6 +450,17 @@ public class DNSLookupService {
   }
 }
 
+private static void printCacheContents(Set<ResourceRecord> recordSet) {
+  for(ResourceRecord rr : recordSet) {
+    String hostString = rr.getHostName();
+    String type = Integer.toString(rr.getType().getCode());
+    String TTL = Long.toString(rr.getTTL());
+    String rdata = rr.getTextResult() == null? rr.getInetResult().toString() : rr.getTextResult();
+    String res = String.format("Hostname: %s Type: %s TTL: %s RData: %s", hostString, type, TTL, rdata);
+    System.out.println(res);
+  }
+}
+
 private static boolean aRecordsContainsNSIP(String NSName,  List<Map<String, String>> aRecords) {
   System.out.println("The NSName " + NSName);
   String cleanNSName = NSName.trim();
@@ -345,10 +475,6 @@ private static boolean aRecordsContainsNSIP(String NSName,  List<Map<String, Str
     }
   }
   return false;
-}
-
-private void queryNameServerIP() {
-
 }
 
  // udp in java send https://www.baeldung.com/udp-in-java
@@ -394,8 +520,13 @@ private void queryNameServerIP() {
 
  private static void FormatOutputTrace(DNSQuery qs, DNSResponse qr) {
      System.out.print("\n\n"); // begin with two blank lines
-     System.out.println("Query Id     " + qs.transID + " " + qs.lookupName + "  " + qs.type + "--> " + qs.DNSIA.getHostAddress()); // TODO???
-     System.out.println("Response ID: " + qr.responseID + " " + "Authoritative " + "= " + qr.authFlag);
+     String convertQType = qs.convertType(Integer.parseInt(qs.type)); // convert type code to corresponding letter code (E.g 1 == A)
+     String queryFormat = String.format("Query ID     %s %s  %s --> %s", qs.transID, qs.lookupName, convertQType, qs.DNSIA.getHostAddress());
+    System.out.println(queryFormat);
+     // System.out.println("Query Id     " + qs.transID + " " + qs.lookupName + "  " + convertQType + " --> " + qs.DNSIA.getHostAddress()); // TODO???
+     String responseFormat = String.format("Response ID: %s Authoritative = %s", qr.responseID, qr.authFlag);
+     System.out.println(responseFormat);
+     // System.out.println("Response ID: " + qr.responseID + " " + "Authoritative " + "= " + qr.authFlag);
      resourceRecordFormat("Answers", qr);
      resourceRecordFormat("Nameservers", qr);
      resourceRecordFormat("Additional Information", qr);
@@ -409,8 +540,8 @@ private void queryNameServerIP() {
   List<Map<String, String>> nsMap = qr.nameRecords;
   List<Map<String, String>> addMap = qr.addRecords;
   cacheRecords(numAnswers, answerMap);
-  cacheRecords(numNameservers, nsMap);
-  cacheRecords(numAddInfo, addMap);
+   cacheRecords(numNameservers, nsMap);
+   cacheRecords(numAddInfo, addMap);
  }
 
  private static void cacheRecords(int numRecords, List<Map<String, String>> recordList) {
@@ -419,9 +550,12 @@ private void queryNameServerIP() {
     long recordTTL = Long.decode(recordList.get(i).get("ttl"));
     int recordType = Integer.parseInt(recordList.get(i).get("rtype"));
     String recordRData = recordList.get(i).get("rdata");
+    String recordStr = String.format("Hostname: %s Type: %s TTL: %s Result: %s", recordName, recordType, recordTTL, recordRData);
+    System.out.println("Caching record: " + recordStr);
     // if resource type is A or AAAA make  RData an InetAddress based on the raw IP address string
     if (recordType == 1 || recordType == 28) {
-      try {
+    try {
+        // TODO????
       InetAddress InetRData = InetAddress.getByName(recordRData);
       ResourceRecord newRecord = new ResourceRecord(recordName, RecordType.getByCode(recordType), recordTTL, InetRData);
       cache.addResult(newRecord);
@@ -429,6 +563,7 @@ private void queryNameServerIP() {
       catch (UnknownHostException err) {
         // TODO
       }
+     
     } else {
       ResourceRecord newRecord = new ResourceRecord(recordName, RecordType.getByCode(recordType), recordTTL,  recordRData);
       cache.addResult(newRecord);
