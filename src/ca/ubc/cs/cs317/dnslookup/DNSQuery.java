@@ -7,27 +7,38 @@ import java.nio.Buffer.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+
+/**
+    * @return
+  * A DNSQuery object with the following attributes <p>
+  * queryString (String): The raw hex string format of the encoded message to send to the DNS server. The queryString DOES NOT begin with 0x <p>
+  * DNSIA (InetAddress): The inetaddress of the DNS server the message is being sent to <p>
+  * lookupName (String):  The domain name being queried <p>
+  * type (String): The Question type in the string form of decimal number <p>
+    * transID (String): The transaction ID <p>
+
+  * @param node  a DNSNode
+  */
 public class DNSQuery {
  String queryString;
- InetAddress DNSIA;  // ip address of DNS the message being sent to
+ InetAddress DNSIA; // ip address of DNS the message being sent to
  String lookupName;
  String type; // QType
  String transID;
 
 
  public DNSQuery(DNSNode node) {
-   ByteArrayOutputStream queryStream = new ByteArrayOutputStream();
-    RecordType type = node.getType();
-    int code = type.getCode();
-    String hostString = node.getHostName();
+  ByteArrayOutputStream queryStream = new ByteArrayOutputStream();
+  RecordType type = node.getType();
+  int code = type.getCode();
+  String hostString = node.getHostName();
   headerFormat header = new headerFormat();
   QuestionFormat questionHeader = new QuestionFormat(hostString, code);
   try {
-    queryStream.write(header.headerBytes);
-    queryStream.write(questionHeader.QuestionBytes);
-  }
-  catch(IOException er) {
-      // TODO
+   queryStream.write(header.headerBytes);
+   queryStream.write(questionHeader.QuestionBytes);
+  } catch (IOException er) {
+   // TODO
   }
   byte[] dnsQueryBytes = queryStream.toByteArray();
   this.type = Integer.toString(code);
@@ -35,85 +46,53 @@ public class DNSQuery {
   this.transID = header.id;
   this.queryString = Bytehelper.bytesToHex(dnsQueryBytes);
  };
+
+ /**
+  * @return
+  * A Class to create header object with the following attributes <p>
+  * headerBytes (byte[]): A byte[] of all the bytes corresponding to the header <p>
+  * id (String): The transaction id in hex String format <p>
+  * @param node  a DNSNode
+  */
  private static class headerFormat {
-  byte[] headerBytes;  
+  byte[] headerBytes;
   private static int HEADER_SIZE = 12;
-  private static int ID_MAX = 65535;
-  private static int ID_MIN = 0;
   String id;
-  byte rd;
-  byte tc;
-  byte aa;
-  byte qr;
-  byte opcode;
-  byte rcode;
-  byte z;
-  byte ra;
-  short qdcount;
-  short ancount;
-  short nscount;
-  short arcount;
-  String headerString;
   public headerFormat() {
-  // this.id = idGenerator();
-   this.rd = 1; // TODO should be 0 but for now make 1
-   this.opcode = 0;
-   this.qr = 0;
-   this.ra = 0;
-   this.z = 0;
-   this.rcode = 0;
-   this.qdcount = 1; //TODO ? only ever sending one question
-   this.ancount = 0;
-   this.nscount = 0;
-   this.arcount = 0;
    createRequestHeader();
-   // this.headerString = headerToHex();
   }
-
-  private int idGenerator() {
-   Random r = new Random();
-   return r.nextInt((ID_MAX - ID_MIN) + 1) + ID_MIN;
+  private void createRequestHeader() {
+   ByteBuffer header = ByteBuffer.allocate(HEADER_SIZE);
+   byte[] randomID = new byte[2];
+   new Random().nextBytes(randomID);
+   this.id = Bytehelper.bytesToHex(randomID);
+   header.put(randomID);
+   header.put((byte) 0x00); // 1st half of flags (0000 0000) (norecursion chnge right most bit to 1 if you want) HARDCODED FLAGS
+   header.put((byte) 0x00); // 2nd half of flags (0000 0000) HARDCODED FLAGS
+   header.put((byte) 0x00); // HARDCODED
+   header.put((byte) 0x01); // numbe of questions HARDCODED
+   // lines 3, 4, and 5 will be all 0s, which is what we want (ANCount, ARCOunt, NSCount)
+   this.headerBytes = header.array();
   }
-  private String headerToHex() {
-   String headerString = String.format("%02X", this.id);
-   int queryParams1 = this.qr + this.opcode + this.aa + this.tc + this.rd;
-   int queryParams2 = this.ra + this.z + this.rcode;
-   headerString += Integer.toHexString(queryParams1);
-   headerString += Integer.toHexString(queryParams2);
-   headerString += String.format("%04X", qdcount); // qdcount two bytes
-   headerString += String.format("%04X", ancount); // two bytes
-   headerString += String.format("%04X", nscount); //two bytes
-   headerString += String.format("%04X", arcount);
-   return headerString;
-  }
-private void createRequestHeader(){
-    ByteBuffer header = ByteBuffer.allocate(this.HEADER_SIZE);
-    byte[] randomID = new byte[2]; 
-    new Random().nextBytes(randomID);
-    this.id = Bytehelper.bytesToHex(randomID);
-    header.put(randomID);
-    header.put((byte)0x00); // 1st half of flags (0000 0000) (norecursion chnge right most bit to 1 if you want)
-    header.put((byte)0x00); // 2nd half of flags (0000 0000)
-    header.put((byte)0x00);
-    header.put((byte)0x01); // numbe of questions
-    //lines 3, 4, and 5 will be all 0s, which is what we want (ANCount, ARCOunt, NSCount)
-    this.headerBytes =  header.array();
-}
  }
-
+ /**
+  * Class to create Question Header
+  * @return
+  * A QuestionFormat object with the following attributes <p>
+  *  QuestionBytes (byte[]): the bytes corresponding to the Question Header
+  * @param lookupString the domain name (string) you are trying to query.
+  * @param type     Record type for search.
+  */
  private static class QuestionFormat {
-private ByteArrayOutputStream questionOutputStream = new ByteArrayOutputStream();
-  private final static int QUESTION_SIZE = 4; // question size without QNAME
+  private ByteArrayOutputStream questionOutputStream = new ByteArrayOutputStream();
   private byte[] qname;
-  private byte[] qtype ; // q type 
-  private static final byte[] qclass = Bytehelper.hexStringToByteArray("0001"); //internet class
-  private int QName_Size;
-//  String questionHeader;
+  private byte[] qtype; // q type 
+  private int QName_Size = 0; // TODO?
+  private static final byte[] qclass = Bytehelper.hexStringToByteArray("0001"); //internet class HARDCODED
   byte[] QuestionBytes;
 
   public QuestionFormat(String lookupString, int typeCode) {
    String qString = formatQName(lookupString);
-  //  this.QuestionBytes = new byte[this.QUESTION_SIZE + this.QName_Size];
    this.qname = Bytehelper.hexStringToByteArray(qString);
    try {
     questionOutputStream.write(this.qname);
@@ -124,41 +103,54 @@ private ByteArrayOutputStream questionOutputStream = new ByteArrayOutputStream()
     // System.out.println("QClss string: " + Bytehelper.bytesToHex(this.qclass));
     this.QuestionBytes = questionOutputStream.toByteArray();
     // System.out.println(Bytehelper.bytesToHex(this.QuestionBytes));
+   } catch (IOException err) {
+    // TODO
    }
-   catch(IOException err) {
-       // TODO
-   }
-   // this.questionHeader = qString + String.format("%04X", this.qtype) + String.format("%04X", this.qclass);
   }
 
+  /**
+   *  @return return a byte[] corresponding to the QType of interest (E.g typeCode of 1 produces a byte[] with byte[0] = 0x0 byte[1] = 0x1)
+   *
+   * @param typeCode the QType you want
+   */
   private byte[] getQTypeBytes(int typeCode) {
-      byte[] qTypeBytes = new byte[2];
-      switch(typeCode) {
-          // A record
-          case 1:
-          qTypeBytes[0] = 0x0;
-          qTypeBytes[1] = 0x1;
-          break;
-          case 2:
-          qTypeBytes[0] = 0x0;
-          qTypeBytes[1] = 0x2;
-          break;
-          case 5:
-          qTypeBytes[0] = 0x0;
-          qTypeBytes[1] = 0x5;
-          break;
-          case 28:
-          qTypeBytes[0] = 0x0;
-          qTypeBytes[1] = 0x1C;
-          break;
+   byte[] qTypeBytes = new byte[2];
+   switch (typeCode) {
+    // A record
+    case 1:
+     qTypeBytes[0] = 0x0;
+     qTypeBytes[1] = 0x1;
+     break;
+     // NS Record
+    case 2:
+     qTypeBytes[0] = 0x0;
+     qTypeBytes[1] = 0x2;
+     break;
+     // CNAME record
+    case 5:
+     qTypeBytes[0] = 0x0;
+     qTypeBytes[1] = 0x5;
+     break;
+     // AAAA record
+    case 28:
+     qTypeBytes[0] = 0x0;
+     qTypeBytes[1] = 0x1C;
+     break;
 
-          default:
-          // TODO shouldnt reach here unless typeCode specified is not A, AAAA, CNAME, NS
-          throw new RuntimeException("Type code not supported " + typeCode);
-      }
-      return qTypeBytes;
+    default:
+     // TODO shouldnt reach here unless typeCode specified is not A, AAAA, CNAME, NS
+     throw new RuntimeException("Type code not supported " + typeCode);
+   }
+   return qTypeBytes;
   }
 
+  /**
+   * @return 
+   * format the domain name string to QName format. (E.g www.apple.com will be translated to the string 03 77 77 77  05 61 70 70 6C 65 03 63 6F 6D )
+   * without the spaces (spaces are shown for readability)
+   *
+   * @param lookupString  domain name being searched.
+   */
   private String formatQName(String lookupString) {
    String qString = "";
    String[] strArr = lookupString.split(Pattern.quote("."));
@@ -180,29 +172,35 @@ private ByteArrayOutputStream questionOutputStream = new ByteArrayOutputStream()
   }
  }
 
+ /**
+  * @return 
+  * The string translation of decimal type code (E.g 1  returns "A")
+  *
+  * @param i  The decimal form of the type code of interest (E.g 1 is an A record)
+  */
  public String convertType(int i) {
-  switch(i) {
-    case 1:
+  switch (i) {
+   case 1:
     return "A";
-    case 2:
+   case 2:
     return "NS";
-    case 5:
+   case 5:
     return "CNAME";
-    case 6:
+   case 6:
     return "SOA";
-    case 11:
+   case 11:
     return "WKS";
-    case 12:
+   case 12:
     return "PTR";
-    case 15:
+   case 15:
     return "MX";
-    case 33:
+   case 33:
     return "SRV";
-    case 28:
+   case 28:
     return "AAAA";
-    default:
+   default:
     System.out.println("Unsupported type supplied, default to A");
-    return "A" ;// unsupported type supplied
+    return "A"; // unsupported type supplied
   }
-}
+ }
 }
