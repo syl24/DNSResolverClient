@@ -445,7 +445,7 @@ public class DNSResponse {
    // System.out.println("RD Data: " + this.RData);
   }
 
-  public void extractResourceName() {
+  private void extractResourceName() {
    // resoure name is never a literal (non label)
    getDomainOffset(currAddr);
    // System.out.println("Current offset resource name: " + currAddr);
@@ -499,7 +499,7 @@ public class DNSResponse {
   *  get the domain offset. Usually used when a pointer has been encountered
   @param offset The offset where you are currently at
   */
-  public void getDomainOffset(int offset) {
+  private void getDomainOffset(int offset) {
    try {
     int curByte = responseBuffer[offset] & 0xFF;
     boolean isPointer = isPointer(curByte);
@@ -536,7 +536,7 @@ public class DNSResponse {
    *  This is usually the case for NS and CNAME recrods, where their RData are not string-literals (unline A and AAAA records)
    * @param offset The offset of current address
    */
-  public HashMap < String, String > extractLabel(int offset) {
+  private HashMap < String, String > extractLabel(int offset) {
    int curByte = responseBuffer[offset] & 0xFF; // cast to int
    HashMap < String, String > labelMap = new HashMap < String, String > ();
    String pointerName = "";
