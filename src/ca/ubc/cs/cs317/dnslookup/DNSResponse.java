@@ -3,6 +3,8 @@ import java.util.regex.Pattern;
 import java.util.stream.*;
 
 import javax.management.RuntimeErrorException;
+import javax.print.attribute.standard.Compression;
+
 import java.nio.ByteBuffer;
 
 import java.io.UnsupportedEncodingException;
@@ -195,7 +197,7 @@ public class DNSResponse {
      throw new RuntimeException("Not implemented");
      // break;
     case 5:
-     System.err.println("Refused");
+     //System.err.println("Refused");
      break;
      // throw new RuntimeException("Refused");
     default:
@@ -227,74 +229,19 @@ public class DNSResponse {
    this.headerOffset += NS_SIZE;
   }
  }
+
  /**
-  *  parseQuestion Object contains the following attributes <p>
-  * QName (String): The domain name being queried
-  * QType (String): The Question tyoe
-  * QClass (String): The Question Class
+  * A class that contains the method {@code extractCompressionName} for extracting a compression format name.
+  *  This class is to be extended by classes that potentially have fields following compression format
   */
- private class parseQuestion {
-  private static final int QTYPE_SIZE = 2;
-  private static final int QCLASS_SIZE = 2;
-  private static final int POINTER_SIZE = 2;
-  String QName = "";
-  String QType;
-  String QClass;
+ private class CompressionFormat {
   private final static int OFFSET_POS = 1; // posistion from RHS where offset is
   private final static int OFFSET_SIZE = 14; // number of bits of the offset
+  private final int POINTER_SIZE = 2;
   private int domainOffset;
-  public parseQuestion() {
-   extractQName();
-   extractQType();
-   extractQClass();
-   // System.out.println("QNAME: " + QName);
-   // System.out.println("QType: " + QType);
-   // System.out.println("QClass: " + QClass);
-  }
+  public CompressionFormat() {
 
-  /*
-  private void extractQName() {
-    parseResourceRecord.
-    // TODO can Question be of the pointer
-   int curByte = responseBuffer[currAddr] & 0xFF; // cast to int
-   while (curByte != 0) {
-    int label_length = curByte;
-    byte[] label_bytes = Bytehelper.readBytes(currAddr + 1, label_length, responseBuffer);
-    currAddr += label_length + 1;
-    try {
-     String labelString = new String(label_bytes, "US-ASCII");
-     this.QName += labelString + ".";
-     curByte = responseBuffer[currAddr] & 0xFF; // cast to int
-    } catch (UnsupportedEncodingException err) {
-     System.err.println("Error in extract QName");
-     throw new RuntimeException(err);
-    }
-   }
-   this.QName = removeLastChar(this.QName); // remove last "." character
-   currAddr += 1; // set offset after terminating byte
   }
-  */
-
-  private void extractQName() {
-   // resoure name is never a literal (non label)
-   getDomainOffset(currAddr);
-   // System.out.println("Current offset resource name: " + currAddr);
-   // System.out.println("Domain offset resource name: " + this.domainOffset);
-   // resource name is label
-   if (this.domainOffset == currAddr) {
-    // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
-    HashMap < String, String > nameMap = extractLabel(currAddr);
-    this.QName = removeLastChar(nameMap.get("name")); // remove last "." character
-    currAddr = Integer.parseInt(nameMap.get("offset")); // set the new offset
-   } else {
-    // resource name is using pointer only read two bytes
-    currAddr += POINTER_SIZE;
-    HashMap < String, String > nameMap = extractLabel(this.domainOffset);
-    this.QName = removeLastChar(nameMap.get("name")); // remove last "." character
-   }
-   // System.out.println("Current offset after parse Name: " + currAddr);  
-  }
-
   private int extractOffset(int message) {
    int offset = bitExtracted(message, OFFSET_SIZE, OFFSET_POS);
    return offset;
@@ -337,7 +284,7 @@ public class DNSResponse {
    *  This is usually the case for NS and CNAME recrods, where their RData are not string-literals (unline A and AAAA records)
    * @param offset The offset of current address
    */
-  public HashMap < String, String > extractLabel(int offset) {
+  public HashMap < String, String > extractCompressionName(int offset) {
    int curByte = responseBuffer[offset] & 0xFF; // cast to int
    HashMap < String, String > labelMap = new HashMap < String, String > ();
    String pointerName = "";
@@ -355,10 +302,10 @@ public class DNSResponse {
      // System.out.println("pointer flag: " + pointerFlag);
      //   System.out.println("cur byte: " + curByte);
     } catch (UnsupportedEncodingException err) {
-     System.err.println("Error pccured in extractLabel");
+     System.err.println("Error pccured in extractCompressionName");
      throw new RuntimeException(err);
     } catch (ArrayIndexOutOfBoundsException err1) {
-     System.err.println("Error occured in extractLabel");
+     System.err.println("Error occured in extractCompressionName");
      System.err.println("Ileggal offset access of responseBuffer: Should not occur: " + offset);
      throw new RuntimeException(err1);
     }
@@ -367,7 +314,7 @@ public class DNSResponse {
     // Name with terminating pointer
     getDomainOffset(offset);
     //System.out.println("the domain offset at terminating pointer: " + this.domainOffset);
-    HashMap < String, String > labelInfo = extractLabel(this.domainOffset);
+    HashMap < String, String > labelInfo = extractCompressionName(this.domainOffset);
     pointerName += labelInfo.get("name");
     labelMap.put("name", pointerName);
     offset += POINTER_SIZE;
@@ -387,6 +334,48 @@ public class DNSResponse {
   private boolean isPointer(int firstByte) {
    int two_left_bits = bitExtracted(firstByte, 2, 7); // if first byte is a pointer, left most 2 bits are 1 1, which is value 3
    return two_left_bits == 3;
+  }
+ }
+ /**
+  *  parseQuestion Object contains the following attributes <p>
+  * QName (String): The domain name being queried
+  * QType (String): The Question tyoe
+  * QClass (String): The Question Class
+  */
+ private class parseQuestion extends CompressionFormat {
+  private static final int QTYPE_SIZE = 2;
+  private static final int QCLASS_SIZE = 2;
+  String QName = "";
+  String QType;
+  String QClass;
+  public parseQuestion() {
+   extractQName();
+   extractQType();
+   extractQClass();
+   // System.out.println("QNAME: " + QName);
+   // System.out.println("QType: " + QType);
+   // System.out.println("QClass: " + QClass);
+  }
+
+  private void extractQName() {
+   CompressionFormat cf = new CompressionFormat();
+   // resoure name is never a literal (non label)
+   cf.getDomainOffset(currAddr);
+   // System.out.println("Current offset resource name: " + currAddr);
+   // System.out.println("Domain offset resource name: " + this.domainOffset);
+   // resource name is label
+   if (cf.domainOffset == currAddr) {
+    // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
+    HashMap < String, String > nameMap = cf.extractCompressionName(currAddr);
+    this.QName = removeLastChar(nameMap.get("name")); // remove last "." character
+    currAddr = Integer.parseInt(nameMap.get("offset")); // set the new offset
+   } else {
+    // resource name is using pointer only read two bytes
+    currAddr += cf.POINTER_SIZE;
+    HashMap < String, String > nameMap = cf.extractCompressionName(cf.domainOffset);
+    this.QName = removeLastChar(nameMap.get("name")); // remove last "." character
+   }
+   // System.out.println("Current offset after parse Name: " + currAddr);  
   }
 
   private void extractQType() {
@@ -410,7 +399,7 @@ public class DNSResponse {
   * RDLength (String): The Question Class 
   * RData (String): The Question Class
   */
- private class parseResourceRecord {
+ private class parseResourceRecord extends CompressionFormat {
   String resourceName;
   String resourceType;
   String resourceClass;
@@ -418,7 +407,6 @@ public class DNSResponse {
   int RDLength; // number of bytes(octets) to read for RDData
   String RData;
   // private Boolean pointerFlag;
-  private int domainOffset;
   // this works for any number of elements:
   public final static int POINTER_SIZE = 2;
   private final static int VARY_SIZE = 9999; // number of bytes to read for a variable length
@@ -447,19 +435,20 @@ public class DNSResponse {
 
   private void extractResourceName() {
    // resoure name is never a literal (non label)
-   getDomainOffset(currAddr);
+   CompressionFormat cf = new CompressionFormat();
+   cf.getDomainOffset(currAddr);
    // System.out.println("Current offset resource name: " + currAddr);
    // System.out.println("Domain offset resource name: " + this.domainOffset);
    // resource name is label
-   if (this.domainOffset == currAddr) {
+   if (cf.domainOffset == currAddr) {
     // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
-    HashMap < String, String > nameMap = extractLabel(currAddr);
+    HashMap < String, String > nameMap = cf.extractCompressionName(currAddr);
     this.resourceName = nameMap.get("name");
     currAddr = Integer.parseInt(nameMap.get("offset")); // set the new offset
    } else {
     // resource name is using pointer only read two bytes
-    currAddr += POINTER_SIZE;
-    HashMap < String, String > nameMap = extractLabel(this.domainOffset);
+    currAddr += cf.POINTER_SIZE;
+    HashMap < String, String > nameMap = cf.extractCompressionName(cf.domainOffset);
     this.resourceName = nameMap.get("name");
    }
    // System.out.println("Current offset after parse Name: " + currAddr);  
@@ -475,12 +464,13 @@ public class DNSResponse {
     return;
    }
    boolean isRDataLabel = typesSupported.get(typeCode);
+   CompressionFormat cf = new CompressionFormat();
    if (isRDataLabel) {
     // if rdata is a label handle label case
-    getDomainOffset(currAddr);
+    cf.getDomainOffset(currAddr);
     // System.out.println("Current offset RData: " + currAddr);
     // System.out.println("Domain offset RData: " + this.domainOffset);    // if resource name is not using a pointer format  set the curaddrr to the number of bytes read for label
-    HashMap < String, String > nameMap = extractLabel(this.domainOffset);
+    HashMap < String, String > nameMap = cf.extractCompressionName(cf.domainOffset);
     this.RData = nameMap.get("name");
     // currAddr += this.RDLength;
     //currAddr = Integer.parseInt(nameMap.get("offset")); // set the new offset
@@ -491,95 +481,7 @@ public class DNSResponse {
     extractNonLabel(currAddr, this.RDLength);
    }
    currAddr += this.RDLength;
-
    // System.out.println("Current offset after parse Record RData: " + this.RData + " | " + currAddr);
-  }
-
-  /**
-  *  get the domain offset. Usually used when a pointer has been encountered
-  @param offset The offset where you are currently at
-  */
-  private void getDomainOffset(int offset) {
-   try {
-    int curByte = responseBuffer[offset] & 0xFF;
-    boolean isPointer = isPointer(curByte);
-    if (!isPointer) {
-     // if the initial offset is not a pointer pass back current address
-     this.domainOffset = offset == currAddr ? currAddr : offset; // decimal representation
-     //   System.out.println("domain offset is: " + this.domainOffset);
-     return;
-    } else {
-     byte[] messageBytes = new byte[2];
-     messageBytes[0] = responseBuffer[offset];
-     messageBytes[1] = responseBuffer[offset + 1];
-     int convertedMessageInt = Integer.parseInt(Bytehelper.bytesToHex(messageBytes), 16);
-     int extractedOffset = extractOffset(convertedMessageInt);
-     getDomainOffset(extractedOffset);
-    }
-   } catch (ArrayIndexOutOfBoundsException err) {
-    System.err.println("Error occured in getDomainOffset");
-    System.err.println("Illegal array access based on offset");
-    throw new RuntimeException(err);
-   } catch (NumberFormatException err1) {
-    System.err.println("Error occured in getDomainOffset");
-    throw new RuntimeException(err1);
-   }
-  }
-
-  private int extractOffset(int message) {
-   int offset = bitExtracted(message, OFFSET_SIZE, OFFSET_POS);
-   return offset;
-  }
-  // label is defined as a non-string literal (E.g has pointer or label or combination of both)
-  /**
-   * Extract A Label, which is defined as a non-string literal (E.g is of the form pointer, label or a combination of both)
-   *  This is usually the case for NS and CNAME recrods, where their RData are not string-literals (unline A and AAAA records)
-   * @param offset The offset of current address
-   */
-  private HashMap < String, String > extractLabel(int offset) {
-   int curByte = responseBuffer[offset] & 0xFF; // cast to int
-   HashMap < String, String > labelMap = new HashMap < String, String > ();
-   String pointerName = "";
-   boolean pointerFlag = isPointer(curByte);
-   while (curByte != 0 && !pointerFlag) {
-    int label_length = curByte;
-    byte[] label_bytes = Bytehelper.readBytes(offset + 1, label_length, responseBuffer);
-    offset += label_length + 1;
-    try {
-     String labelString = new String(label_bytes, "US-ASCII");
-     pointerName += labelString + ".";
-     // System.out.println(labelString);
-     curByte = responseBuffer[offset] & 0xFF; // cast to int
-     pointerFlag = isPointer(curByte);
-     // System.out.println("pointer flag: " + pointerFlag);
-     //   System.out.println("cur byte: " + curByte);
-    } catch (UnsupportedEncodingException err) {
-     System.err.println("Error pccured in extractLabel");
-     throw new RuntimeException(err);
-    } catch (ArrayIndexOutOfBoundsException err1) {
-     System.err.println("Error occured in extractLabel");
-     System.err.println("Ileggal offset access of responseBuffer: Should not occur: " + offset);
-     throw new RuntimeException(err1);
-    }
-   }
-   if (pointerFlag == true) {
-    // Name with terminating pointer
-    getDomainOffset(offset);
-    //System.out.println("the domain offset at terminating pointer: " + this.domainOffset);
-    HashMap < String, String > labelInfo = extractLabel(this.domainOffset);
-    pointerName += labelInfo.get("name");
-    labelMap.put("name", pointerName);
-    offset += POINTER_SIZE;
-    labelMap.put("offset", Integer.toString(offset));
-    return labelMap;
-   }
-   // label with terminating 0 byte
-   // System.out.println("Reached label with terminating byte");
-   offset += 1;
-   String formatString = removeLastChar(pointerName);
-   labelMap.put("name", formatString); /// remove last "." character
-   labelMap.put("offset", Integer.toString(offset));
-   return labelMap;
   }
 
   // (E.g string literal, Should never encounter a pointer never terminates with null byte)
@@ -625,15 +527,6 @@ public class DNSResponse {
    String rdString = Bytehelper.bytesToHex(Bytehelper.readBytes(currAddr, RDLENGTH_SIZE, responseBuffer));
    currAddr += RDLENGTH_SIZE;
    this.RDLength = Integer.parseInt(rdString, 16);
-  }
-  // determine if answer name is using compressed format (left most bits are 1 1)
-  private boolean isPointer(int firstByte) {
-   int two_left_bits = bitExtracted(firstByte, 2, 7); // if first byte is a pointer, left most 2 bits are 1 1, which is value 3
-   return two_left_bits == 3;
-  }
-
-  private int extractPointerOffset(int pointerByte) {
-   return bitExtracted(pointerByte, OFFSET_SIZE, OFFSET_POS);
   }
  }
  /**
