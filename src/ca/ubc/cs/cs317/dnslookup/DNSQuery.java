@@ -37,8 +37,9 @@ public class DNSQuery {
   try {
    queryStream.write(header.headerBytes);
    queryStream.write(questionHeader.QuestionBytes);
-  } catch (IOException er) {
-   // TODO
+  } catch (IOException err) {
+    System.err.println("Error occured in DNSQuery");
+   throw new RuntimeException(err);
   }
   byte[] dnsQueryBytes = queryStream.toByteArray();
   this.type = Integer.toString(code);
@@ -104,7 +105,8 @@ public class DNSQuery {
     this.QuestionBytes = questionOutputStream.toByteArray();
     // System.out.println(Bytehelper.bytesToHex(this.QuestionBytes));
    } catch (IOException err) {
-    // TODO
+    System.err.println("Error occured in DNSQuery");
+    throw new RuntimeException(err);
    }
   }
 
@@ -139,6 +141,7 @@ public class DNSQuery {
 
     default:
      // TODO shouldnt reach here unless typeCode specified is not A, AAAA, CNAME, NS
+     System.err.println("Error occured in DNSQuery");
      throw new RuntimeException("Type code not supported " + typeCode);
    }
    return qTypeBytes;
