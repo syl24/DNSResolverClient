@@ -208,14 +208,14 @@ public class DNSLookupService {
      // TODO where to cache?
      //  cacheDNSResponse(qr);
 
-     System.out.println("Response is Authoratative (valid)");
+    // System.out.println("Response is Authoratative (valid)");
      boolean isCNAME = isLookupCNAME(node);
      if (!isCNAME) {
       // lookupString is not CNAME and desired results are in cache
-      System.out.println("Response is Authoratative and contains desired results (type and hoststring) - Terminate");
+    //  System.out.println("Response is Authoratative and contains desired results (type and hoststring) - Terminate");
       return cache.getCachedResults(node);
      } else {
-      System.out.println("Response contains CNAME - require resolve");
+     // System.out.println("Response contains CNAME - require resolve");
       // lookupString is a CNAME or desired results are not in cache
       String serverNodeStr = node.getHostName();
       RecordType CNameType = RecordType.CNAME;
@@ -233,7 +233,7 @@ public class DNSLookupService {
        }
        return returnCache;
       } else {
-       System.out.println("Make additional queries for cnames");
+    //   System.out.println("Make additional queries for cnames");
        // TODO make additional query
        return returnCache;
       }
@@ -243,7 +243,7 @@ public class DNSLookupService {
     } else {
      // TODO handle this case 
      // SOA Response???
-     System.err.println("Auth error: response is authoroatative and Rcode is 0: no error but no answers");
+    // System.err.println("Auth error: response is authoroatative and Rcode is 0: no error but no answers");
     }
     // TODO CATCH CASE WHERE VALIDAUTHRESPONSE IS FALSE AND AA BIT (1) + RCODE (0) *TERMINATE THERE ERROR
     // terminate as reached valid auth response
@@ -273,14 +273,14 @@ public class DNSLookupService {
       // if answer contains no CNAMES terminate
       // TODO where to cache?
       // cacheDNSResponse(qr);
-      System.out.println("Response is Authoratative (valid)");
+     //  System.out.println("Response is Authoratative (valid)");
       boolean isCNAME = isLookupCNAME(serverNode);
       if (!isCNAME) {
        // lookupString is not CNAME and desired results are in cache
-       System.out.println("Response is Authoratative and contains desired results (type and hoststring) - Terminate");
+       // System.out.println("Response is Authoratative and contains desired results (type and hoststring) - Terminate");
        return true;
       } else {
-       System.out.println("Response contains CNAME - require resolve");
+       // System.out.println("Response contains CNAME - require resolve");
        // lookupString is a CNAME or desired results are not in cache
        String serverNodeStr = serverNode.getHostName();
        RecordType CNameType = RecordType.CNAME;
@@ -302,14 +302,14 @@ public class DNSLookupService {
         return true;
        } else {
         // TODO make additional query
-        System.out.println("Make additional queries for cnames");
+        // System.out.println("Make additional queries for cnames");
         return true;
        }
       }
       // TODO where to cahce???
       // cacheDNSResponse(qr);
      } else {
-      System.err.println("Auth error: response is authoroatative and Rcode is 0: no error but no answers");
+    //   System.err.println("Auth error: response is authoroatative and Rcode is 0: no error but no answers");
       return true;
      }
     } else {
@@ -323,6 +323,8 @@ public class DNSLookupService {
        InetAddress nameServerIA = InetAddress.getByName(nameServerIP);
        getResults(newNode, nameServerIA);
       } catch (UnknownHostException err) {
+        System.err.println(err);
+        throw new RuntimeException(err);
        // TODO
       }
       return true;
@@ -334,7 +336,8 @@ public class DNSLookupService {
      }
     }
    } catch (UnknownHostException err) {
-    throw new RuntimeException("shoouldn't reach here");
+    System.err.println(err);
+    throw new RuntimeException(err);
    } catch (RuntimeException err2) {
     System.err.println(err2);
     return true;
@@ -415,32 +418,43 @@ public class DNSLookupService {
   }
  }
 
+ /**
+  * @param nameRecords  A {@code List<Map<String, String>>} of all the name records to query.
+  * @return The ip address (rdata) of the A record found for a name server
+  */
+
  private static String queryNameRecords(List < Map < String, String >> nameRecords) {
   for (int i = 0; i < nameRecords.size(); i++) {
    String hostString = nameRecords.get(i).get("rdata");
    DNSNode nsNode = new DNSNode(hostString, RecordType.A);
    boolean nameServerFound = findNameServerIP(nsNode, rootServer);
-   System.out.println("nameServerFound: " + nameServerFound);
+   // System.out.println("nameServerFound: " + nameServerFound);
    // if name server is found consult the cache associated with the node
    if (nameServerFound) {
     // potentially cache miss
     Set < ResourceRecord > nsRecordsSet = cache.getCachedResults(nsNode);
     String nsNodeName = nsNode.getHostName();
-    System.out.println("Name server found with hostname: " + nsNode.getHostName());
+    //System.out.println("Name server found with hostname: " + nsNode.getHostName());
     for (ResourceRecord record: nsRecordsSet) {
      String recordName = record.getHostName();
-     System.out.println(record.getHostName());
+    //ln(record.getHostName());
      if (Objects.equals(recordName, nsNodeName)) {
-      System.out.println("CACHE CONTAINS THE NAME SERVER IP");
+      // System.out.println("CACHE CONTAINS THE NAME SERVER IP");
       return record.getTextResult();
      }
     }
    }
   }
+  // HARD fail if this is the case
   throw new RuntimeException("Name servers query finished, could not find ip address");
  }
 
  // return true if name server IP is found otherwise false
+ /**
+  * @param node  A DNSNode with desired hostname and type
+  * @param queryIA The InetAddress of the DNS server you are querying to
+  * @return a boolean indicating if the name server IP is found
+  */
  private static boolean findNameServerIP(DNSNode node, InetAddress queryIA) {
   DNSQuery qf = new DNSQuery(node);
   String nodeString = node.getHostName();
@@ -453,7 +467,7 @@ public class DNSLookupService {
    DNSResponse qr = send_udp_message(qf, 1);
    // if UDP message failed max number of tries
    if (qr.aRecords == null) {
-    System.out.println("UDP message exceeded max tries");
+    System.err.println("UDP message exceeded max tries");
     // go to the next node;
     return false;
    }
@@ -465,9 +479,9 @@ public class DNSLookupService {
     List < String > serversArr = qr.serversToQueryArr;
     for (int i = 0; i < serversArr.size(); i++) {
      try {
-      System.out.println("Resolving name servers: Servers to query");
-     //  qr.printServerArr();
-    //  System.out.println(serversArr.size());
+      // System.out.println("Resolving name servers: Servers to query");
+      //  qr.printServerArr();
+      //  System.out.println(serversArr.size());
       InetAddress serverIA = InetAddress.getByName(serversArr.get(i));
       boolean isFound = findNameServerIP(node, serverIA);
       if (isFound != false) {
@@ -476,12 +490,13 @@ public class DNSLookupService {
      } catch (UnknownHostException err) {
       // TODO
       System.err.println(err);
+      return false;
      }
     }
     return false;
    }
   } catch (RuntimeException err) {
-   System.out.println(err);
+   System.err.println(err);
    throw new RuntimeException(err);
    // SERIOUSLY BREAK IF NAME SERVER CAN'T BE FOUND
   }
@@ -494,10 +509,15 @@ public class DNSLookupService {
    String TTL = Long.toString(rr.getTTL());
    String rdata = rr.getTextResult() == null ? rr.getInetResult().toString() : rr.getTextResult();
    String res = String.format("Hostname: %s Type: %s TTL: %s RData: %s", hostString, type, TTL, rdata);
-   System.out.println(res);
+   // System.out.println(res);
   }
  }
 
+ /**
+  * @param NSName  The Nameserver you are trying to search for
+  * @param aRecords A {@code List<Map<String, String>>} of the A records to search
+  * @return a boolean indicating if the Nameserver IPV4 address is found in the {@code aRecords}
+  */
  private static boolean aRecordsContainsNSIP(String NSName, List < Map < String, String >> aRecords) {
   //System.out.println("The NSName " + NSName);
   String cleanNSName = NSName.trim();
@@ -520,11 +540,18 @@ public class DNSLookupService {
 
  // udp in java send https://www.baeldung.com/udp-in-java
  // return true if response is a valid authoratative answer response, else false (keep querying)
+
+ /**
+  * @param qf  A {@code DNSQuery}
+  * @param numTrys  The number of current attempts to send a message to the DNS Server
+  * @return A {@code DNSResponse}
+  */
  private static DNSResponse send_udp_message(DNSQuery qf, int numTrys) throws RuntimeException {
   if (numTrys > MAX_RETRIES) {
    System.err.println("ERROR\tMaximum number of retries " + MAX_RETRIES + " exceeded");
    byte[] blankBytes = new byte[0];
    DNSResponse blankResponse = new DNSResponse(blankBytes);
+   // retiurn a non-useable DNSResponse if max attempts reached
    return blankResponse;
   }
   String message = qf.queryString;
@@ -545,9 +572,7 @@ public class DNSLookupService {
    socket.receive(receivePack);
    long endTime = System.currentTimeMillis();
    socket.close();
-
-   // byte[] trimResBuffer = Bytehelper.byteTrim(rPack.getData()); // trim trailing 0s
-   // System.out.println("Response received after " + (endTime - startTime)/1000. + " seconds " + "(" + (numTrys) + " retries)");
+   // System.out.println("Response received after " + (endTime - startTime) / 1000. + " seconds " + "(" + (numTrys) + " retries)");
    String receiveStr = Bytehelper.bytesToHex(receivePack.getData());
    // System.out.println("Receive hexString: "+ receiveStr);
    try {
@@ -558,25 +583,30 @@ public class DNSLookupService {
     }
     return extractedResponse;
    } catch (RuntimeException err) {
-    System.err.println("Caught error here: " + err);
+    // System.err.println("Caught error here: " + err);
+    throw new RuntimeException(err);
    }
   } catch (SocketException err) {
    // fail gracefully
-   System.out.println(err);
+   // System.err.println(err);
    throw new RuntimeException(err);
   } catch (SocketTimeoutException err2) {
-   System.out.println(err2);
+   //  System.err.println(err2);
+   // Socket timed out, resend the message and increase the poll count
    return send_udp_message(qf, numTrys + 1);
    // TODO resend packet if not received output -1
   } catch (IOException e1) {
    // fail gracefully
-   System.out.println(e1);
+ //  System.err.println(e1);
    throw new RuntimeException(e1);
   }
-  System.err.println("Shouldn't reach here");
-  throw new RuntimeException("Shouldnt reach here");
  }
 
+ /**
+  * Format the output trace
+  * @param qs  A {@code DNSQuery}
+  * @param qr  A {@code DNSResponse}
+  */
  private static void FormatOutputTrace(DNSQuery qs, DNSResponse qr) {
   System.out.print("\n\n"); // begin with two blank lines
   String convertQType = qs.convertType(Integer.parseInt(qs.type)); // convert type code to corresponding letter code (E.g 1 == A)
@@ -591,6 +621,11 @@ public class DNSLookupService {
   resourceRecordFormat("Additional Information", qr);
  }
 
+ /**
+  * Cache all the records in the {@code DNSResponse} qr
+  * @param qr  A {@code DNSResponse}
+  */
+
  private static void cacheDNSResponse(DNSResponse qr) {
   int numAnswers = qr.numAnswers; // 
   int numNameservers = qr.numNameservers;
@@ -603,6 +638,12 @@ public class DNSLookupService {
   cacheRecords(numAddInfo, addMap);
  }
 
+ /**
+       * Cache {@code numRecords} records from {@code recordList}
+  * @param numRecords  The number of records to cache
+    * @param recordList  The list of records {@code List<Map<String, String>>} the cache
+
+  */
  private static void cacheRecords(int numRecords, List < Map < String, String >> recordList) {
   for (int i = 0; i < numRecords; i++) {
    String recordName = recordList.get(i).get("name");
@@ -613,20 +654,28 @@ public class DNSLookupService {
    // if resource type is A or AAAA make  RData an InetAddress based on the raw IP address string
    if (recordType == 1 || recordType == 28) {
     try {
-     // TODO????
+     // if record type is A or AAAA record, rData is an InetAddress
      InetAddress InetRData = InetAddress.getByName(recordRData);
      ResourceRecord newRecord = new ResourceRecord(recordName, RecordType.getByCode(recordType), recordTTL, InetRData);
      cache.addResult(newRecord);
     } catch (UnknownHostException err) {
-     // TODO
+     // was unable to cache this record
+     // System.err.println(err);
+     return;
     }
-
    } else {
     ResourceRecord newRecord = new ResourceRecord(recordName, RecordType.getByCode(recordType), recordTTL, recordRData);
     cache.addResult(newRecord);
    }
   }
  }
+
+ /**
+       * Format the resource record to verbosePrint
+  * @param type  The resource records section type (E.g Answers, Nameservers, Additional Information)
+    * @param qr  A {@code DNSResponse}
+
+  */
 
  private static void resourceRecordFormat(String type, DNSResponse qr) {
   int numRecords;
@@ -663,42 +712,6 @@ public class DNSLookupService {
    verbosePrintResourceRecord(newRecord, recordType);
   }
  }
-
- /*
- // https://www.tutorialspoint.com/convert-hex-string-to-byte-array-in-java
- private static byte[] hexStringToByteArray(String str) {
-  byte[] val = new byte[str.length() / 2];
-  for (int i = 0; i < val.length && i < MAX_SEND_SIZE; i++) {
-   int index = i * 2;
-   int j = Integer.parseInt(str.substring(index, index + 2), 16);
-   val[i] = (byte) j;
-  }
-  return val;
- }
-
- private static String bytesToHex(byte[] bytes) {
-    char[] hexChars = new char[bytes.length * 2];
-    for ( int j = 0; j < bytes.length; j++ ) {
-        int v = bytes[j] & 0xFF;
-        hexChars[j * 2] = hexArray[v >>> 4];
-        hexChars[j * 2 + 1] = hexArray[v & 0x0F];
-    }
-    return new String(hexChars);
-}
-
-// eliminate trailing 0s of  byte array
-// https://stackoverflow.com/questions/17003164/byte-array-with-padding-of-null-bytes-at-the-end-how-to-efficiently-copy-to-sma
-private static byte[] byteTrim(byte[] bytes)
-{
-    int i = bytes.length - 1;
-    while (i >= 0 && bytes[i] == 0)
-    {
-        --i;
-    }
-    return Arrays.copyOf(bytes, i + 1);
-}
-*/
-
  /**
   * Retrieves DNS results from a specified DNS server. Queries are sent in iterative mode,
   * and the query is repeated with a new server if the provided one is non-authoritative.

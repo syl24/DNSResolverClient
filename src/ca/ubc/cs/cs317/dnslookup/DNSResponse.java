@@ -182,7 +182,7 @@ public class DNSResponse {
      System.err.println("Server Failure.");
      throw new RuntimeException("Server Failure");
     case 3:
-     System.err.println("Name error");
+     //System.err.println("Name error");
      // should be SOA response
      break;
      // throw new RuntimeException("Name error");
@@ -758,6 +758,8 @@ public class DNSResponse {
   */
 
  private static String removeLastChar(String str) {
+   // blank str;
+   if (str.length() < 1) return str;
   return str.substring(0, str.length() - 1);
  }
 
