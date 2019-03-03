@@ -158,7 +158,8 @@ public class DNSResponse {
   private void extractTransID() {
    byte[] IDBytes = Bytehelper.readBytes(this.headerOffset, ID_SIZE, this.headerArr); // starting offset of 0
    this.headerOffset += ID_SIZE;
-   this.transID = Bytehelper.bytesToHex(IDBytes);
+   String hexTransID = "0x" + Bytehelper.bytesToHex(IDBytes);
+   this.transID = Integer.toString(Integer.decode(hexTransID));
   }
   private void extractFlags() {
    byte[] flagBytes = Bytehelper.readBytes(this.headerOffset, FLAGS_SIZE, this.headerArr);

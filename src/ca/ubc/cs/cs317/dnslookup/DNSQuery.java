@@ -44,7 +44,7 @@ public class DNSQuery {
   byte[] dnsQueryBytes = queryStream.toByteArray();
   this.type = Integer.toString(code);
   this.lookupName = hostString;
-  this.transID = header.id;
+  this.transID = Integer.toString(Integer.decode(header.id));
   this.queryString = Bytehelper.bytesToHex(dnsQueryBytes);
  };
 
@@ -66,7 +66,7 @@ public class DNSQuery {
    ByteBuffer header = ByteBuffer.allocate(HEADER_SIZE);
    byte[] randomID = new byte[2];
    new Random().nextBytes(randomID);
-   this.id = Bytehelper.bytesToHex(randomID);
+   this.id = "0x" + Bytehelper.bytesToHex(randomID);
    header.put(randomID);
    header.put((byte) 0x00); // 1st half of flags (0000 0000) (norecursion chnge right most bit to 1 if you want) HARDCODED FLAGS
    header.put((byte) 0x00); // 2nd half of flags (0000 0000) HARDCODED FLAGS

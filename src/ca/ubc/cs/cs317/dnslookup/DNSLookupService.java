@@ -219,6 +219,14 @@ public class DNSLookupService {
  }
 
  // node and InetAddress
+  /**
+  * Retrieves DNS results from a specified DNS server. Queries are sent in iterative mode,
+  * and the query is repeated with a new server if the provided one is non-authoritative.
+  * Results are stored in the cache.
+  *
+  * @param node   Host name and record type to be used for the query.
+  * @param DNSIA InetAddress of the server to be used for the query.
+  */
  private static boolean makeAdditionalQueries(DNSNode node, InetAddress DNSIA) {
   try {
    DNSQuery qf = new DNSQuery(node);
