@@ -534,6 +534,9 @@ public class DNSLookupService {
    DatagramPacket receivePack = new DatagramPacket(receiveBuf, receiveBuf.length);
    socket.setSoTimeout(TIMEOUT);
    long startTime = System.currentTimeMillis();
+   if (verboseTracing) {
+     FormatQueryTrace(qf);
+   }
    socket.send(pack);
    socket.receive(receivePack);
    long endTime = System.currentTimeMillis();
@@ -545,7 +548,7 @@ public class DNSLookupService {
     DNSResponse extractedResponse = new DNSResponse(receivePack.getData());
     cacheDNSResponse(extractedResponse);
     if (verboseTracing) {
-     FormatOutputTrace(qf, extractedResponse);
+     FormatResponseTrace(extractedResponse);
     }
     return extractedResponse;
    } catch (RuntimeException err) {
@@ -573,11 +576,7 @@ public class DNSLookupService {
   * @param qs  A {@code DNSQuery}
   * @param qr  A {@code DNSResponse}
   */
- private static void FormatOutputTrace(DNSQuery qs, DNSResponse qr) {
-  System.out.print("\n\n"); // begin with two blank lines
-  String convertQType = qs.convertType(Integer.parseInt(qs.type)); // convert type code to corresponding letter code (E.g 1 == A)
-  String queryFormat = String.format("Query ID     %s %s  %s --> %s", qs.transID, qs.lookupName, convertQType, qs.DNSIA.getHostAddress());
-  System.out.println(queryFormat);
+ private static void FormatResponseTrace(DNSResponse qr) {
   // System.out.println("Query Id     " + qs.transID + " " + qs.lookupName + "  " + convertQType + " --> " + qs.DNSIA.getHostAddress()); // TODO???
   String responseFormat = String.format("Response ID: %s Authoritative = %s", qr.responseID, qr.authFlag);
   System.out.println(responseFormat);
@@ -585,6 +584,13 @@ public class DNSLookupService {
   resourceRecordFormat("Answers", qr);
   resourceRecordFormat("Nameservers", qr);
   resourceRecordFormat("Additional Information", qr);
+ }
+
+ private static void FormatQueryTrace(DNSQuery qs) {
+  System.out.print("\n\n"); // begin with two blank lines
+  String convertQType = qs.convertType(Integer.parseInt(qs.type)); // convert type code to corresponding letter code (E.g 1 == A)
+  String queryFormat = String.format("Query ID     %s %s  %s --> %s", qs.transID, qs.lookupName, convertQType, qs.DNSIA.getHostAddress());
+  System.out.println(queryFormat);
  }
 
  /**
