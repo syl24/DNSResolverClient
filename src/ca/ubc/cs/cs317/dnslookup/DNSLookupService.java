@@ -541,9 +541,9 @@ public class DNSLookupService {
    socket.receive(receivePack);
    long endTime = System.currentTimeMillis();
    socket.close();
-   // System.out.println("Response received after " + (endTime - startTime) / 1000. + " seconds " + "(" + (numTrys - 1) + " retries)");
+  System.out.println("Response received after " + (endTime - startTime) / 1000. + " seconds " + "(" + (numTrys - 1) + " retries)");
    String receiveStr = Bytehelper.bytesToHex(receivePack.getData());
-   // System.out.println("Receive hexString: "+ receiveStr);
+  //System.out.println("Receive hexString: "+ receiveStr);
    try {
     DNSResponse extractedResponse = new DNSResponse(receivePack.getData());
     cacheDNSResponse(extractedResponse);

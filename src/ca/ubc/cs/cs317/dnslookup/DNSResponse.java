@@ -22,7 +22,7 @@ import java.util.*;
   * authFlag (String): Easier for output in DNSLookupservice. The value is true or false if Authoritative <p>
   * isPacketDrooped (boolean): Flag to determine if the packet has been dropped when max reattempts reached. Look at send_udp_message <p>
   * isAuth (boolean):  boolean for Authoritative <p>
-    * queryNSFlag (String): flag to determine whether or not to query nameservers as dead end reached <p>
+  * queryNSFlag (String): flag to determine whether or not to query nameservers as dead end reached <p>
   * validAuthFlag (String): determine if the authorative response is valid <p>
   * numAnswers (String): number of records in Nameserver section <p>
   * numNameServers (String): number of records in Nameserver section <p>
@@ -33,7 +33,7 @@ import java.util.*;
   where each record is in the format of HashMap<String, String> with keys rdata, name, ttl, class, rtype <p>
   * answerRecords (List<Map<String, String>>):  <p>
   * nameRecords (List<Map<String, String>>): <p>
-    * addRecords (List<Map<String, String>>):  <p>
+  * addRecords (List<Map<String, String>>):  <p>
   * aRecords (List<Map<String, String>>): <p>
   * nsRecords (List<Map<String, String>>): <p>
   * 
@@ -107,7 +107,7 @@ public class DNSResponse {
   getAandNSRecords(1);
   getAandNSRecords(2);
   getAandNSRecords(3);
-  // printRecordListVals(this.nameRecords);
+  //printRecordListVals(this.nameRecords);
   // printRecordListVals(this.addRecords);
   // System.out.println("answer record size: " + this.answerRecords.size());
   // System.out.println("name record size: " + this.nameRecords.size());
@@ -282,7 +282,7 @@ public class DNSResponse {
   // label is defined as a non-string literal (E.g has pointer or label or combination of both)
   /**
    * Extract A Label, which is defined as a non-string literal (E.g is of the form pointer, label or a combination of both)
-   *  This is usually the case for NS and CNAME recrods, where their RData are not string-literals (unline A and AAAA records)
+   *  This is usually the case for NS and CNAME records, where their RData are not string-literals (unlike A and AAAA records)
    * @param offset The offset of current address
    */
   public HashMap < String, String > extractCompressionName(int offset) {
@@ -637,17 +637,17 @@ public class DNSResponse {
    i++;
   }
   // System.out.println("Current offset after parse all resources for type: " + type + " " + currAddr);
-  if (n != 0) printRecordListVals(recordList);
+ // if (n != 0) printRecordListVals(recordList);
   return recordList;
  }
 
  private void printRecordListVals(List < Map < String, String >> recordList) {
   for (int i = 0; i < recordList.size(); i++) {
-   // System.out.println("rdata val : " + recordList.get(i).get("rdata"));
-   // System.out.println("ttl val: " + recordList.get(i).get("ttl"));
-   // System.out.println("name val: " + recordList.get(i).get("name"));
-   // System.out.println("class val: " + recordList.get(i).get("class"));
-   // System.out.println("rtype val: " + recordList.get(i).get("rtype"));
+    System.out.println("rdata val : " + recordList.get(i).get("rdata"));
+    System.out.println("ttl val: " + recordList.get(i).get("ttl"));
+    System.out.println("name val: " + recordList.get(i).get("name"));
+    System.out.println("class val: " + recordList.get(i).get("class"));
+    System.out.println("rtype val: " + recordList.get(i).get("rtype"));
   }
  }
 
@@ -701,7 +701,7 @@ public class DNSResponse {
  private void getServersToQuery() {
   boolean hasNameRecords = this.numNameservers > 0;
   boolean hasAddrecords = this.numAddInfo > 0;
-  // if not a valid authoratiative answer and has name + additional records
+  // if not a valid authoritative answer and has name + additional records
   if (!this.isAuth && hasNameRecords && hasAddrecords) {
    for (int i = 0; i < this.numAddInfo; i++) {
     String rType = addRecords.get(i).get("rtype");
@@ -824,7 +824,7 @@ public class DNSResponse {
   */
  public void printServerArr() {
   for (int i = 0; i < serversToQueryArr.size(); i++) {
-   // System.out.println("ipAddress val: " + serversToQueryArr.get(i));
+    System.out.println("ipAddress val: " + serversToQueryArr.get(i));
   }
  }
  //------------------------------------------------- -----------------------------------------------------//
