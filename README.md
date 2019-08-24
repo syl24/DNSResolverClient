@@ -1,4 +1,4 @@
-# DNS Resolver Client: A scaled down iterative DNS Resolver Client using UDP
+# A scaled down iterative DNS Resolver Client using UDP
 
 **Helpful Documentation**:
 
@@ -16,7 +16,7 @@ A scaled back iterative DNS resolver client which allows users to interact with 
 
 **Requirements**:
 
-If you are using Windows, install some application to Linux or bash on windows. I highly recommend to install [WSL](https://docs.microsoft.com/en-us/windows/wsl/install-win10) to run Linux in a windows environment. To install Java and javac on Linux (Ubuntu) refer to this [documentation](https://www.digitalocean.com/community/tutorials/how-to-install-java-with-apt-on-ubuntu-18-04). Source code currently has only been tested on Linux (WSL), other platforms may behave unexpectedly.
+If you are using Windows, install some application to run Linux or bash on Windows. I highly recommend to install [WSL](https://docs.microsoft.com/en-us/windows/wsl/install-win10) to run Linux in a Windows environment. To install Java and javac on Linux (Ubuntu) refer to this [documentation](https://www.digitalocean.com/community/tutorials/how-to-install-java-with-apt-on-ubuntu-18-04). Source code currently has only been tested on Linux (WSL), other platforms may behave unexpectedly.
 
 **Running the application**:
 
