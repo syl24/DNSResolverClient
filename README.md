@@ -1,4 +1,4 @@
-# DNS Resolver Client: A scaled down iterative DNS Resolver Client using UDP for UBC course CPSC 317
+# DNS Resolver Client: A scaled down iterative DNS Resolver Client using UDP
 
 **Helpful Documentation**:
 
@@ -10,7 +10,7 @@
 
 **Intro**:
 
-A scaled back iterative DNS resolver client which allows users to interact with various DNS servers to resolve domain names (E.g [google.ca](www.google.ca)) into IP addresses. The DNS client supports record types A (IPV4), AAAA (IPV6), CNAME, and NS. Implemented a Depth-First-Search traversal, cache, and CNAME prediction, which optimized performance by over 50%.
+A scaled back iterative DNS resolver client which allows users to interact with various DNS servers to resolve domain names (E.g [google.ca](https://www.google.ca/)) into IP addresses. The DNS client supports record types A (IPV4), AAAA (IPV6), CNAME, and NS. Implemented a Depth-First-Search traversal, cache, and CNAME prediction, which optimized performance by over 50%.
 
 [![dns gif](dns.svg)](https://asciinema.org/a/zB0FruScfbdksITzEqqd32my3?autoplay=1)
 
