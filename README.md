@@ -29,3 +29,5 @@ Initially when running the application, go to the root directory of the project 
 * server `IP`: `IP` is a string which represents the root domain ip address (root server). Default to 199.7.83.42
 * dump: stdout all the contents of the cache.
 * quit: Quit the application.
+
+**Note**: The program will give up if CNAME redirection results in more than 10 queries and if a datagram fails to be sent after two retries. 
